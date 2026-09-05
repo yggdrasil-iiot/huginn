@@ -147,10 +147,24 @@ class TcpStreamAssemblerTest {
     @Test
     void 스트림_열거_순서는_최초_등장_순서다() {
         // HashMap 이면 리포트가 비결정적이 된다. 비결정성의 발원지가 이 층이다.
+        // 이 네 방향(A:40000<->B:502, A:40001<->B:502)은 HashMap 반복 순서가 삽입 순서와
+        // 실제로 어긋나는 조합이다 — 직접 LinkedHashMap/HashMap 에 넣어 반복 순서를 찍어
+        // 확인했다. 방향이 둘뿐이던 이전 버전은 우연히 두 순서가 같아 회귀를 못 잡았다.
+        // 그러니 방향 수를 줄이거나 주소·포트를 바꾸지 말 것 — 이 보장이 다시 사라진다.
         List<TcpStream> streams = assembleAll(
-            seg(B, 502, A, 40000, 7000, "res", false),      // 이쪽이 먼저 등장
-            seg(A, 40000, B, 502, 100, "req", false));
-        assertEquals(502, streams.get(0).sourcePort());
+            seg(A, 40000, B, 502, 100, "req0", false),
+            seg(B, 502, A, 40000, 7000, "res0", false),
+            seg(A, 40001, B, 502, 200, "req1", false),
+            seg(B, 502, A, 40001, 8000, "res1", false));
+
+        List<String> actual = streams.stream()
+            .map(s -> s.sourceAddress() + ":" + s.sourcePort() + "->" + s.targetAddress() + ":" + s.targetPort())
+            .toList();
+        assertEquals(List.of(
+            A + ":40000->" + B + ":502",
+            B + ":502->" + A + ":40000",
+            A + ":40001->" + B + ":502",
+            B + ":502->" + A + ":40001"), actual);
     }
 
     @Test
