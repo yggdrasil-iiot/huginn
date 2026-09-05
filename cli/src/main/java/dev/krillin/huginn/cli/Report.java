@@ -1,5 +1,6 @@
 package dev.krillin.huginn.cli;
 
+import dev.krillin.huginn.decode.ProtocolCoverage;
 import dev.krillin.huginn.reconcile.Finding;
 import dev.krillin.huginn.reconcile.Observation;
 
@@ -27,6 +28,7 @@ record Report(int packetsProcessed,
               int undecidableObservations,
               long unobservedBytes,
               long industrialBytes,
+              List<ProtocolCoverage> byProtocol,
               List<Finding> findings) {
 
     String render() {
@@ -38,6 +40,7 @@ record Report(int packetsProcessed,
         out.append(count("UNDECIDABLE 대화", undecidableConversations));
         out.append(count("UNDECIDABLE 관찰", undecidableObservations));
         out.append(unobservedLine());
+        out.append(protocolTable());
 
         if (findings.isEmpty()) {
             return out.append("\n위반 없음\n").toString();
@@ -53,6 +56,36 @@ record Report(int packetsProcessed,
                 .append("           ").append(finding.detail()).append('\n');
         }
         return out.toString();
+    }
+
+    /**
+     * 프로토콜별 커버리지 표.
+     *
+     * <p>위 수치는 프로토콜을 합산한 것이라 <b>99% 가 S7 인 캡처에서 Modbus 가 얼마나 얇은지</b>
+     * 알 수 없다. 이 표가 그 질문에 답한다.
+     *
+     * <p><b>대화를 하나도 주장하지 못한 프로토콜도 0 행으로 낸다</b> — 없다는 사실도 정보다.
+     * 행 순서는 해독기 등록 순서라 같은 입력에 같은 리포트가 나온다.
+     */
+    private String protocolTable() {
+        if (byProtocol.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder("\n  프로토콜        해독 대화  UNDEC 대화        관찰  UNDEC 관찰       미관측 바이트\n");
+        for (ProtocolCoverage one : byProtocol) {
+            String ratio = String.format(Locale.ROOT, "(%.1f%%)",
+                one.industrialBytes() == 0 ? 0.0 : 100.0 * one.unobservedBytes() / one.industrialBytes());
+            out.append(String.format(Locale.ROOT, "  %-14s %9s %11s %11s %11s %11s %s%n",
+                one.protocol(),
+                number(one.decodedConversations()), number(one.undecidableConversations()),
+                number(one.observations()), number(one.undecidableObservations()),
+                number(one.unobservedBytes()), ratio));
+        }
+        return out.toString().replace(System.lineSeparator(), "\n");
+    }
+
+    private static String number(long value) {
+        return String.format(Locale.ROOT, "%,d", value);
     }
 
     /**

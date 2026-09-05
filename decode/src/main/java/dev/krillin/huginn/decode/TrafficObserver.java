@@ -51,6 +51,13 @@ public final class TrafficObserver {
         int rejectedRuns = 0;
         int dirtyRuns = 0;
 
+        // 프로토콜별 누적. 등록 순서를 그대로 쓰므로 리포트의 표 순서가 고정된다.
+        // 칸: 0 해독 대화 · 1 판정불가 대화 · 2 관찰 · 3 UNDECIDABLE 관찰 · 4 미관측 · 5 전체 바이트
+        Map<ProtocolDecoder, long[]> perProtocol = new LinkedHashMap<>();
+        for (ProtocolDecoder decoder : decoders) {
+            perProtocol.put(decoder, new long[6]);
+        }
+
         for (List<TcpStream> conversation : conversations(streams)) {
             List<ProtocolDecoder> claimers = new ArrayList<>();
             Map<ProtocolDecoder, List<StreamEvidence>> evidence = new LinkedHashMap<>();
@@ -84,10 +91,16 @@ public final class TrafficObserver {
             ProtocolDecoder winner = claimers.get(0);
             List<StreamEvidence> conversationEvidence = evidence.get(winner);
 
+            long[] mine = perProtocol.get(winner);
+
             // 대상 외로 빠져나간 뒤에 센다 — 배제가 규칙이 아니라 구조로 지켜진다.
             for (StreamEvidence one : conversationEvidence) {
-                unobserved += one.unreadBytes() + one.stream().missingBytes();
-                industrial += one.capturedBytes() + one.stream().missingBytes();
+                long unread = one.unreadBytes() + one.stream().missingBytes();
+                long total = one.capturedBytes() + one.stream().missingBytes();
+                unobserved += unread;
+                industrial += total;
+                mine[4] += unread;
+                mine[5] += total;
                 rejectedRuns += one.rejectedRuns();
                 dirtyRuns += one.dirtyRuns();
             }
@@ -102,13 +115,26 @@ public final class TrafficObserver {
                 // 판정 불가. 여기서 대화를 끝낸다 — 이어 돌면 관찰 두 건과 이중 계수가 난다.
                 observations.add(undecidableOf(conversationEvidence.get(0).stream(), winner));
                 undecidable++;
+                mine[1]++;
+                mine[2]++;
+                mine[3]++;
             } else if (result.requestObservations().isEmpty()) {
                 // 클라이언트 방향에서 프레임을 못 뽑았다. 이 갈래가 없으면 대화가 어디에도 안 세인다.
                 observations.add(undecidableOf(result.client().stream(), winner));
                 undecidable++;
+                mine[1]++;
+                mine[2]++;
+                mine[3]++;
             } else {
                 observations.addAll(result.requestObservations());
                 decoded++;
+                mine[0]++;
+                mine[2] += result.requestObservations().size();
+                for (Observation one : result.requestObservations()) {
+                    if (one.access() == Access.UNDECIDABLE) {
+                        mine[3]++;
+                    }
+                }
 
                 // 관찰은 나왔지만 다 봤다고 말하면 안 되는 경우. 대화 계수는 더 건드리지 않는다.
                 // 꼬리 관찰의 주소는 언제나 client 것이다 — tailUndecidable 이 서버 방향의
@@ -117,13 +143,22 @@ public final class TrafficObserver {
                 if (client.unreadBytes() > 0 || client.stream().hasGap()
                     || client.stream().truncated() || result.tailUndecidable()) {
                     observations.add(undecidableOf(client.stream(), winner));
+                    mine[2]++;
+                    mine[3]++;
                 }
             }
         }
 
+        List<ProtocolCoverage> byProtocol = new ArrayList<>();
+        for (Map.Entry<ProtocolDecoder, long[]> entry : perProtocol.entrySet()) {
+            long[] c = entry.getValue();
+            byProtocol.add(new ProtocolCoverage(entry.getKey().protocol(),
+                (int) c[0], (int) c[1], (int) c[2], (int) c[3], c[4], c[5]));
+        }
+
         return new Diagnosed(
             new ObservationResult(List.copyOf(observations), decoded, undecidable, skipped,
-                unobserved, industrial),
+                unobserved, industrial, List.copyOf(byProtocol)),
             multiClaim, bothDirections, rejectedRuns, dirtyRuns);
     }
 

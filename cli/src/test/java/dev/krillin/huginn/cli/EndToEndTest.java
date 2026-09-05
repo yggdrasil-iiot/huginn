@@ -166,6 +166,16 @@ class EndToEndTest {
     }
 
     @Test
+    void 리포트는_프로토콜별_커버리지를_낸다() {
+        // 합산만 내면 어느 프로토콜이 얼마나 얇은지 알 수 없다(2차 설계 §6).
+        String out = Pipeline.run(declaredReadCapture(), POLICY).render();
+
+        assertTrue(out.contains("프로토콜"), "표 머리말");
+        assertTrue(out.contains("MODBUS_TCP"), "대화를 주장한 프로토콜");
+        assertTrue(out.contains("S7COMM"), "하나도 없어도 행을 낸다 — 없다는 사실도 정보다");
+    }
+
+    @Test
     void 리포트는_못_본_바이트를_비율과_함께_낸다() {
         // 이 줄이 없으면 "해독한 대화 2" 가 그 대화의 대부분을 못 봤다는 사실을 숨긴다.
         String out = Pipeline.run(declaredReadCapture(), POLICY).render();
