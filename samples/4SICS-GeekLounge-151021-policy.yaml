@@ -1,5 +1,18 @@
+# 4SICS-GeekLounge-151021.pcap 용 통신 정책.
+#
+# 이 캡처의 Modbus 는 전량 FC 43(장비 열거 스캔)이라 UNDECIDABLE 이고 선언해도 판정에
+# 쓰이지 않는다(1차 §10). S7 만 선언한다.
+# 1차와 같은 편집 의도 — 폴러의 읽기만 선언하고 쓰기와 나머지 호스트는 선언하지 않는다.
 version: 1
 
-# 이 캡처의 Modbus 관찰은 전부 UNDECIDABLE 이라 선언해도 판정에 쓰이지 않는다.
-peers: []
-allowed: []
+peers:
+  - id: hmi-poller
+    address: 10.10.10.20
+  - id: plc-s7
+    address: 10.10.10.10
+
+allowed:
+  - from: hmi-poller
+    to: plc-s7
+    protocol: S7COMM
+    access: [READ]

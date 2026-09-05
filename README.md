@@ -2,10 +2,10 @@
 
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
 ![Build](https://img.shields.io/badge/build-Maven%20multi--module-blue)
-![Tests](https://img.shields.io/badge/tests-157-brightgreen)
+![Tests](https://img.shields.io/badge/tests-215-brightgreen)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
-**[Yggdrasil](https://github.com/yggdrasil-iiot) IIoT 스파인의 관찰·대사 축 — 선언한 것과 실제로 오간 것을 맞춰 본다.**
+**[Yggdrasil](https://github.com/yggdrasil-iiot) IIoT 스파인의 관찰·대사 축 — 선언한 것과 실제로 오간 것을 맞춰 본다.** Modbus/TCP 와 S7comm 을 읽는다.
 
 > **fail-closed 는 길목을 지나는 것만 막는다. Huginn 은 지나지 않은 것을 본다.**
 
@@ -78,6 +78,10 @@ Huginn — 통신 대사 결과
 | 산업 프로토콜이 아닌 스트림은 `UNDECIDABLE` 이 아니라 **대상 외**다 | `EndToEndTest.비산업_트래픽은_UNDECIDABLE이_아니라_대상_외로_센다` |
 | 대화 계수 셋의 합이 전체 대화 수다 — 어느 대화도 빠지거나 두 번 세이지 않는다 | `ModbusObserverTest.대화_수는_세_계수의_합과_같다` · `클라이언트_방향만_프레임을_못_뽑은_대화도_어딘가에_센다` |
 | 같은 입력에 같은 리포트가 나온다 | `EndToEndTest.같은_입력에_같은_리포트가_나온다` |
+| **S7 은 ROSCTR 이 방향을 선언하므로 신호 결합이 필요 없다** | `S7DecoderTest.응답만_잡힌_캡처는_판정하지_않는다` · `양쪽_방향에_모두_요청이_있으면_판정하지_않는다` |
+| 비-S7 TPKT(COTP 연결 요청)는 소비하되 세지 않는다 — 멈추면 그 대화의 요청이 전부 사라진다 | `S7FramerTest.연결요청_뒤의_Job_을_정상적으로_뽑는다` |
+| **어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다** — 65,536 값 전수, 실제 프레이머로 | `CoexistenceTest.어떤_바이트열도_두_프레이머에_동시에_걸리지_않는다` |
+| 두 프로토콜이 섞여도 대화 계수의 합이 전체 대화 수다 | `CoexistenceTest.한_캡처에_두_프로토콜이_섞여도_계수의_합이_전체_대화_수다` |
 | 위반이 든 캡처에서 실제로 잡힌다 — 정상 캡처의 0 건만으로는 증명되지 않는다 | `EndToEndTest.미등록_장비의_쓰기를_잡는다` · `비표준_포트의_우회를_잡는다` |
 
 ## 하지 않는 것 — 그리고 그 이유
@@ -88,7 +92,9 @@ Huginn — 통신 대사 결과
 | **능동 스캔** | OT 에서는 스캔이 설비를 멈춘다. 수동 관찰이 원칙이다 |
 | **자동 차단·교정** | 고치지 않고 **보고만 한다.** 자동 교정은 판정 로직이 틀렸을 때 피해를 증폭시킨다 |
 | **OPC UA · Sparkplug 해독** | 거버넌스 경로 **자체**라 우회 탐지 대상이 아니다 |
-| **S7comm 해독** | 1 차에서 증명할 것은 프로토콜 개수가 아니라 대사 루프 전체가 서는가다. 루프를 먼저 세우고 두 번째 프로토콜로 붙인다 — 그때 `Observation` 이음매가 제대로 잡혔는지가 함께 검증된다 |
+| **S7comm 의 CONTROL 계열** | PLC Start/Stop 과 블록 다운로드는 S7 에서 가장 중요한 우회 신호이지만 4SICS 캡처에 그 트래픽이 없다. 합성으로만 검증할 것이라 B단계로 미뤘다 |
+| **S7comm-plus** · **Userdata(ROSCTR 7) 해석** | 전자는 4SICS 세 캡처에 0 프레임, 후자는 전체 4 건이다. 검증할 데이터가 없다 |
+| **갭 이후 구간 해독** | 재조립에 갭이 있으면 그 지점에서 멈춘다. 실캡처에서 이 정책의 대가가 크다는 것이 2차에서 드러났다(`samples/README.md` §④) — 고칠 후보이지 지금 동작은 의도된 것이다 |
 | **게이트웨이 뒤 유닛ID 단위 판정** | 정책이 IP 기준이라 시리얼 게이트웨이 경유 우회는 보이지 않는다. 유닛ID 를 정책에 넣으려면 계약 자체를 바꿔야 한다 |
 | **재동기화** | 프레임 경계를 찾아 앞으로 스캔하지 않는다. 임의 바이너리를 Modbus 로 오인하면 미등록 쌍에서 HIGH 가 만들어진다 — 오탐이 오검출보다 비싸다 |
 | **절대 성능 주장** | 로컬 측정으로는 증명되지 않는다 |
@@ -97,7 +103,7 @@ Huginn — 통신 대사 결과
 
 ```
 pcap/       pcap 파일 → 패킷. 링크레이어·IPv4·TCP 스트림 재조립
-decode/     Modbus/TCP → Observation      ← 프로토콜 지식은 여기서 끝난다
+decode/     Modbus/TCP · S7comm → Observation  ← 프로토콜 지식은 여기서 끝난다
 contract/   CommunicationPolicy 읽기
 reconcile/  관찰 ↔ 선언 대사 → Finding    ← 순수 로직. 입출력도 프로토콜 지식도 없다
 cli/        진입점과 리포트
@@ -108,6 +114,9 @@ cli/        진입점과 리포트
 ```bash
 mvn test
 ```
+
+215 건 중 4 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
+캡처 없이는 건너뛰므로 기본 실행은 211 건이다 — `samples/README.md` 참조.
 
 설계와 구현 계획은 [`docs/superpowers/`](docs/superpowers/) 아래에 있다.
 

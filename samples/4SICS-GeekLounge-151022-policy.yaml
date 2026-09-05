@@ -5,6 +5,9 @@
 # **읽는 것만** 선언했다. 실제로는 같은 폴러가 쓰기도 하고, 다른 두 호스트도 붙는다.
 #
 # 이 파일은 시나리오이지 4SICS 랩의 실제 승인 목록이 아니다 — 그런 목록은 공개돼 있지 않다.
+#
+# 2차에서 S7comm 규칙을 더했다. 편집 의도는 같다 — S7 폴러(10.10.10.20)의 **읽기만**
+# 선언하고 쓰기와 나머지 호스트(10.10.10.30·192.168.1.10)는 선언하지 않는다.
 version: 1
 
 peers:
@@ -16,6 +19,10 @@ peers:
     address: 192.168.88.61
   - id: plc-95
     address: 192.168.88.95
+  - id: hmi-poller-s7
+    address: 10.10.10.20
+  - id: plc-s7
+    address: 10.10.10.10
 
 allowed:
   - from: poller
@@ -31,4 +38,9 @@ allowed:
   - from: poller
     to: plc-95
     protocol: MODBUS_TCP
+    access: [READ]
+
+  - from: hmi-poller-s7
+    to: plc-s7
+    protocol: S7COMM
     access: [READ]
