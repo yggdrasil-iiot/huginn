@@ -33,11 +33,6 @@ import java.util.List;
  */
 final class ModbusDecoder implements ProtocolDecoder {
 
-    /** 임시 — Task 5 에서 RunReader 로 대체된다. 지금은 첫 구간만 읽어 동작을 보존한다. */
-    private static byte[] firstRun(TcpStream stream) {
-        return stream.runs().isEmpty() ? new byte[0] : stream.runs().get(0);
-    }
-
     @Override
     public Protocol protocol() {
         return Protocol.MODBUS_TCP;
@@ -45,8 +40,27 @@ final class ModbusDecoder implements ProtocolDecoder {
 
     @Override
     public StreamEvidence scan(TcpStream stream) {
-        FramingResult framing = ModbusFramer.frames(firstRun(stream));
-        return new StreamEvidence(stream, framing.frames().size(), framing.undecodedBytes() > 0);
+        RunReader.Reading<FramingResult> reading = read(stream);
+        return new StreamEvidence(stream, framesOf(reading).size(), reading.unreadBytes(),
+            reading.capturedBytes(), reading.rejectedRuns(), reading.dirtyRuns());
+    }
+
+    private static RunReader.Reading<FramingResult> read(TcpStream stream) {
+        return RunReader.read(stream, ModbusFramer::frames);
+    }
+
+    /**
+     * 수용된 구간들의 프레임을 순서대로 이어 붙인다 — 구간별로 따로 판정하지 않는다.
+     *
+     * <p>두 구간의 형태가 어긋나면 {@link ModbusShape#ofStream} 이 합쳐서 UNKNOWN 을 내고,
+     * 그것은 판정 불가 쪽으로 기우는 보수적 방향이라 이 설계의 원칙과 맞다.
+     */
+    private static List<ModbusFrame> framesOf(RunReader.Reading<FramingResult> reading) {
+        List<ModbusFrame> frames = new ArrayList<>();
+        for (FramingResult one : reading.accepted()) {
+            frames.addAll(one.frames());
+        }
+        return frames;
     }
 
     @Override
@@ -70,7 +84,7 @@ final class ModbusDecoder implements ProtocolDecoder {
         }
 
         List<Observation> observations = new ArrayList<>();
-        for (ModbusFrame frame : ModbusFramer.frames(firstRun(client.stream())).frames()) {
+        for (ModbusFrame frame : framesOf(read(client.stream()))) {
             observations.add(observationOf(client.stream(), frame));
         }
         return new Decoded(observations, client, false, false);
@@ -108,8 +122,7 @@ final class ModbusDecoder implements ProtocolDecoder {
         int responseCount = 0;
 
         for (StreamEvidence evidence : conversation) {
-            List<ModbusFrame> frames = ModbusFramer.frames(firstRun(evidence.stream())).frames();
-            switch (ModbusShape.ofStream(frames)) {
+            switch (ModbusShape.ofStream(framesOf(read(evidence.stream())))) {
                 case REQUEST_ONLY -> {
                     requestCount++;
                     requestSide = Direction.of(evidence.stream());

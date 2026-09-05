@@ -101,7 +101,7 @@ public final class TrafficObserver {
                 // 꼬리 관찰의 주소는 언제나 client 것이다 — tailUndecidable 이 서버 방향의
                 // 사건(Userdata·COTP 분할)에서 비롯됐더라도 그렇다.
                 StreamEvidence client = result.client();
-                if (client.leftoverBytes() || client.stream().hasGap()
+                if (client.unreadBytes() > 0 || client.stream().hasGap()
                     || client.stream().truncated() || result.tailUndecidable()) {
                     observations.add(undecidableOf(client.stream(), winner));
                 }
