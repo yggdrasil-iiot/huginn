@@ -52,16 +52,36 @@ class RealCaptureTest {
     }
 
     @Test
-    void Modbus_판정은_1차와_한_치도_다르지_않다() throws Exception {
-        // S7 을 켜면 총계는 당연히 움직인다. Modbus 만 등록해 1차 기준선과 대조한다.
+    void Modbus_판정은_MEI_해석분만_움직였다() throws Exception {
+        // 1차 기준선에서 **UNDECIDABLE 관찰만** 48 → 24 로 줄었다. 감소분 24 는 tshark 가 센
+        // 이 캡처의 FC 43 요청 수와 정확히 같다 — MEI 14 를 읽어 READ 로 판정하기 시작했기
+        // 때문이다(1차 §5 개정). 나머지 네 수치는 한 치도 안 움직였다.
+        //
+        // 관찰 총수가 그대로인 것이 중요하다: 같은 프레임을 같은 개수로 보되 access 만 바뀌었다.
         ObservationResult r = TrafficObserver.observe(
             streamsOf("4SICS-GeekLounge-151022.pcap"), List.of(new ModbusDecoder()));
 
         assertEquals(56, r.decodedConversations());
         assertEquals(932_655, r.skippedConversations());
         assertEquals(24, r.undecidableConversations());
-        assertEquals(48, undecidableCount(r), "UNDECIDABLE 관찰");
-        assertEquals(49_767, r.observations().size(), "관찰 총수");
+        assertEquals(24, undecidableCount(r), "UNDECIDABLE 관찰 — 48 에서 FC 43 요청 24 건만큼 줄었다");
+        assertEquals(49_767, r.observations().size(), "관찰 총수는 그대로다");
+    }
+
+    @Test
+    void 장비_열거_스캔이_이제_관찰이_된다() throws Exception {
+        // 1차 §10 이 "이 스캔은 Finding 이 되지 않고 UNDECIDABLE 수치로만 남는다" 고 적은 문제다.
+        // 151021 의 Modbus 는 전량 FC 43 이고, 한 호스트가 PLC 여섯 대를 차례로 두드린다.
+        ObservationResult r = TrafficObserver.observe(
+            streamsOf("4SICS-GeekLounge-151021.pcap"), List.of(new ModbusDecoder()));
+
+        long reads = r.observations().stream()
+            .filter(o -> o.access() == dev.krillin.huginn.reconcile.Access.READ).count();
+        assertEquals(11, reads, "tshark 가 센 FC 43 요청 11 건이 전부 READ 관찰이 됐다");
+        assertEquals("device-id:1", r.observations().stream()
+            .filter(o -> o.access() == dev.krillin.huginn.reconcile.Access.READ)
+            .findFirst().orElseThrow().objectRef(),
+            "tshark 의 modbus.read_device_id 가 전부 1(Basic)이다");
     }
 
     @Test

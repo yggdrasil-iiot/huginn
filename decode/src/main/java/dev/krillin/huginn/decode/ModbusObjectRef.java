@@ -34,11 +34,26 @@ public final class ModbusObjectRef {
      * @param pdu 함수코드를 뺀 나머지 데이터. 앞 2바이트가 시작 주소인 함수코드에서만 쓰인다.
      */
     public static String of(int functionCode, byte[] pdu) {
+        if (functionCode == 43) {
+            return encapsulated(pdu);
+        }
         ObjectKind kind = BY_FUNCTION_CODE.get(functionCode);
         if (kind == null || pdu.length < 2) {
             return "fc:" + functionCode;
         }
         int startAddress = ((pdu[0] & 0xFF) << 8) | (pdu[1] & 0xFF);
         return kind.name() + ":" + (kind.base() + startAddress);
+    }
+
+    /**
+     * FC 43 은 주소가 아니라 MEI 구조를 싣는다. MEI 14 면 Read Device ID 코드까지 적는다 —
+     * tshark 의 {@code modbus.read_device_id} 와 대조되는 값이며 실캡처에 코드 1·2 가 나타난다.
+     * 그 외 MEI 는 무엇을 건드렸는지 모르므로 함수코드만 적는다.
+     */
+    private static String encapsulated(byte[] pdu) {
+        if (pdu.length >= 2 && (pdu[0] & 0xFF) == 0x0E) {
+            return "device-id:" + (pdu[1] & 0xFF);
+        }
+        return "fc:43";
     }
 }

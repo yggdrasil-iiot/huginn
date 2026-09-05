@@ -163,7 +163,7 @@ final class ModbusDecoder implements ProtocolDecoder {
             new Endpoint(stream.sourceAddress(), stream.sourcePort()),
             new Endpoint(stream.targetAddress(), stream.targetPort()),
             Protocol.MODBUS_TCP,
-            ModbusAccess.of(frame.functionCode()),
+            ModbusAccess.of(frame.functionCode(), frame.pdu()),
             ModbusObjectRef.of(frame.functionCode(), frame.pdu()));
     }
 
