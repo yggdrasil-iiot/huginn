@@ -34,6 +34,10 @@
 | `reconcile/…/Protocol.java` | `S7COMM` 상수 하나 — **§7 예산** | 수정 |
 | `samples/*-policy.yaml` (3개) | S7 규칙 추가 | 수정 |
 | `samples/README.md` | 결과표 재기록 | 수정 |
+| `decode/src/test/…/S7FixturesTest.java` | 픽스처가 실캡처 바이트를 재현하는지 | 신규 |
+| `decode/src/test/…/S7FramerTest.java` · `S7AccessTest` · `S7ObjectRefTest` · `S7DecoderTest` | 각 단위 | 신규 |
+| `decode/src/test/…/CoexistenceTest.java` | 두 프로토콜 공존과 프레이머 배타성 | 신규 |
+| `decode/src/test/…/RealCaptureTest.java` | 실캡처 회귀·진단(환경변수 게이트) | 신규 |
 
 **손대지 않는다:** `ObservationResult` · `Report` · `Huginn` · `contract/` 전체 · `pcap/` 전체 · `ModbusFramer`·`ModbusShape`·`ModbusAccess`·`ModbusObjectRef` · `ModbusObserverTest` · `EndToEndTest` · `ExamplePolicyTest`.
 
@@ -42,6 +46,22 @@
 ## Chunk 1: 이음매 추출 — 동작은 한 톨도 바뀌지 않는다
 
 이 청크의 검증은 단순하다. **`ModbusObserverTest` 20건과 `cli` 11건이 한 줄도 고쳐지지 않은 채 그대로 통과하면 성공이고, 하나라도 고쳐야 하면 실패다.** 새 테스트를 쓰지 않는다 — 기존 테스트가 그물이다.
+
+### Task 0: 기준 커밋을 잡는다
+
+§7의 이음매 측정이 전부 이 값에 걸린다. 잡아두지 않으면 Task 3·12와 완료 조건의 명령이 실행 불가능하다.
+
+- [ ] **Step 1: 시작 지점을 기록한다**
+
+```bash
+git rev-parse HEAD > .huginn-a-base    # .gitignore 에 넣지 않는다 — 커밋하지 말고 로컬에만 둔다
+export BASE=$(cat .huginn-a-base)      # PowerShell: $env:BASE = Get-Content .huginn-a-base
+echo $BASE
+```
+
+이후 계획서의 `$BASE` 는 전부 이 값이다. 작업이 끝나면 이 파일을 지운다.
+
+---
 
 ### Task 1: 이음매 타입 셋
 
@@ -145,7 +165,7 @@ interface ProtocolDecoder {
 
 - [ ] **Step 4: 컴파일 확인**
 
-Run: `mvn -q -pl decode -am test-compile`
+Run: `mvn -pl decode -am test-compile`
 Expected: 성공(경고 없음). 아직 소비자가 없다.
 
 - [ ] **Step 5: 커밋**
@@ -170,12 +190,22 @@ git commit -m "feat: 이음매 타입 셋 — 프로토콜 지식은 이 뒤에 
 
 - [ ] **Step 1: 지금 동작을 초록으로 확인해 기준선을 잡는다**
 
-Run: `mvn -q -pl decode -am test`
+Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `ModbusObserverTest` `Tests run: 20, Failures: 0`
 
 - [ ] **Step 2: `ModbusDecoder` 작성 — 기존 로직을 옮겨 담는다**
 
-`ModbusObserver`의 `clientDirection`·`observationOf`·`Direction` 을 이 클래스로 **그대로** 옮긴다. 로직을 손보지 않는다 — 옮기면서 고치면 무엇이 회귀를 냈는지 알 수 없다.
+`ModbusObserver`의 `clientDirection`·`observationOf`·`Direction` 을 이 클래스로 **판정 로직 그대로** 옮긴다. 옮기면서 고치면 무엇이 회귀를 냈는지 알 수 없다.
+
+**다만 세 곳은 그대로 옮길 수 없다. 무엇을 어떻게 바꿔야 하는지 미리 적는다 — 여기가 이 태스크에서 가장 막히기 쉬운 지점이다.**
+
+| 원래 | 새 형태 | 이유 |
+|---|---|---|
+| `clientDirection`이 `decoded.framing().frames()` 로 캐시된 프레임을 읽는다 | **스트림마다 `ModbusFramer.frames(evidence.stream().contiguousPrefix())`를 다시 부른다** | `StreamEvidence`는 프레임을 노출하지 않는다(설계 §3). 프로토콜 지식이 순회기로 새지 않게 하려고 치르는 비용이며, 설계가 "두 번 프레이밍"으로 이미 인정했다 |
+| `conversations`가 `List<List<Decoded>>`를 돌려주며 프레이밍까지 한다 | `TrafficObserver`로 옮기고 **`List<List<TcpStream>>`을 돌려준다.** 프레이밍은 하지 않는다 | 순회기는 프로토콜을 몰라야 한다 |
+| `find(List<Decoded>, Direction)` | `find(List<StreamEvidence>, Direction)` | 시그니처만 바뀐다 |
+
+**이름 충돌 주의.** `ModbusObserver` 안에 `private record Decoded(TcpStream, FramingResult)` 가 이미 있고, Task 1이 같은 패키지에 이음매용 `Decoded` 를 만들었다. Step 5에서 `ModbusObserver`를 줄이면 사라지지만 **Step 2~3이 먼저 온다.** 옮길 때 그 private record 를 함께 지우거나, Step 5를 먼저 하고 컴파일 오류를 따라가며 채우는 편이 낫다.
 
 ```java
 package dev.krillin.huginn.decode;
@@ -269,7 +299,7 @@ import java.util.Map;
 public final class TrafficObserver {
 
     private static final List<ProtocolDecoder> DECODERS =
-        List.of(new ModbusDecoder());   // Task 10 에서 S7Decoder 가 추가된다
+        List.of(new ModbusDecoder());   // Task 9 에서 S7Decoder 가 추가된다
 
     private TrafficObserver() {
     }
@@ -397,10 +427,10 @@ public final class ModbusObserver {
 
 - [ ] **Step 6: 기존 테스트가 무변경으로 통과하는지 확인**
 
-Run: `mvn -q -pl decode -am test`
+Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `ModbusObserverTest` `Tests run: 20, Failures: 0` — **테스트 파일은 한 글자도 고치지 않았다.**
 
-Run: `git diff --stat decode/src/test cli/src/test`
+Run: `git diff HEAD --stat -- decode/src/test cli/src/test`
 Expected: **빈 출력.** 테스트가 바뀌었다면 리팩터링이 아니라 동작 변경이다. 되돌리고 원인을 찾는다.
 
 - [ ] **Step 7: 커밋**
@@ -429,13 +459,13 @@ import dev.krillin.huginn.decode.TrafficObserver;          // 5행
 
 - [ ] **Step 2: 전체 테스트 통과 확인**
 
-Run: `mvn -q test`
+Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`, 총 157건 그대로.
 
 - [ ] **Step 3: 이음매 예산이 지켜졌는지 지금 한 번 센다**
 
-Run: `git diff --stat <A단계-시작-커밋>..HEAD -- pcap/src/main contract/src/main reconcile/src/main cli/src/main`
-Expected: `cli/…/Pipeline.java | 3 +++---` 한 줄만. `Protocol.java`는 Task 9에서 더해진다.
+Run: `git diff --stat $BASE..HEAD -- pcap/src/main contract/src/main reconcile/src/main cli/src/main`
+Expected: `cli/.../Pipeline.java | 6 +++---` 한 줄만(3줄 수정 = 추가 3 + 삭제 3). `Protocol.java`는 Task 8에서 더해진다.
 
 - [ ] **Step 4: 커밋**
 
@@ -465,6 +495,8 @@ git commit -m "refactor: 파이프라인이 프로토콜 중립 순회기를 부
 - Create: `decode/src/test/java/dev/krillin/huginn/decode/S7Fixtures.java`
 
 `ModbusFixtures` 선례를 그대로 따른다 — **`public final class`이고 메서드도 전부 `public static`이다.** Task 8·9는 물론 B단계의 `cli` E2E도 test-jar 로 이것을 쓴다. `private`이면 그때 컴파일이 깨진다.
+
+> **이 태스크만 픽스처를 테스트보다 먼저 쓴다.** 1차의 `PcapBuilder`와 같은 예외다 — 픽스처가 없으면 그것을 검증할 테스트조차 쓸 수 없다. Task 5부터는 테스트가 먼저다.
 
 - [ ] **Step 1: 픽스처 작성**
 
@@ -566,6 +598,9 @@ public final class S7Fixtures {
 
     /** 항목 하나를 `12 <len> <body>` 로 감싼다 — len 은 syntax id 부터 센다. */
     private static byte[] item(byte[] body) {
+        if (body.length > 255) {
+            throw new IllegalArgumentException("항목 길이 필드는 1바이트다: " + body.length);
+        }
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(0x12);
         out.write(body.length);
@@ -647,7 +682,7 @@ void 설계_문서의_실제_캡처_바이트를_재현한다() {
 
 - [ ] **Step 3: 통과 확인**
 
-Run: `mvn -q -pl decode -am test`
+Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `S7FixturesTest` `Tests run: 1, Failures: 0`
 
 - [ ] **Step 4: 커밋**
@@ -684,6 +719,13 @@ void 유효한_Job_프레임을_뽑는다() {
 @Test
 void 한_세그먼트의_TPKT_여러_개를_전부_뽑는다() {
     // 실캡처에 한 패킷당 PDU 가 여럿인 경우가 있다(tshark 가 쉼표로 나열하는 그것).
+    S7FramingResult r = S7Framer.frames(S7Fixtures.concat(
+        S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16))),
+        S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 17))),
+        S7Fixtures.job(S7Fixtures.setupCommunication())));
+    assertEquals(3, r.frames().size());
+    assertEquals(0xF0, r.frames().get(2).functionCode());
+    assertEquals(0, r.undecodedBytes());
 }
 
 @Test
@@ -718,15 +760,38 @@ void 연결요청_뒤의_Job_을_정상적으로_뽑는다() {
 @Test
 void 페이로드가_0x32가_아니면_소비하되_세지_않는다() {
     // TPKT/COTP 는 ISO-on-TCP 일반 규약이라 S7 전용이 아니다.
+    byte[] notS7 = S7Fixtures.tpkt(new byte[]{0x02, (byte) 0xF0, (byte) 0x80,
+        0x33, 0x01, 0, 0, 0, 1, 0, 2, 0, 0});          // 0x33 — S7 이 아니다
+    S7FramingResult r = S7Framer.frames(S7Fixtures.concat(
+        notS7, S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16)))));
+    assertEquals(1, r.frames().size(), "S7 프레임만 센다");
+    assertEquals(0, r.undecodedBytes(), "미해독이 아니라 관심사가 아닌 프레임이다");
 }
 
 @Test
 void TPKT_길이_정합성이_깨지면_그_지점부터_미해독이다() {
     // param-len 을 부풀린 프레임. 남은 전부가 미해독이고 재동기화하지 않는다.
+    byte[] frame = S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16)));
+    frame[13] = (byte) (frame[13] + 1);                 // S7 헤더의 param-len 하위 바이트
+    byte[] stream = S7Fixtures.concat(frame, S7Fixtures.job(S7Fixtures.setupCommunication()));
+
+    S7FramingResult r = S7Framer.frames(stream);
+
+    assertTrue(r.frames().isEmpty());
+    assertEquals(stream.length, r.undecodedBytes(), "뒤의 유효 프레임도 재동기화로 건지지 않는다");
 }
 
 @Test
-void 마지막_프레임이_잘려도_예외가_아니라_미해독_바이트다() { }
+void 마지막_프레임이_잘려도_예외가_아니라_미해독_바이트다() {
+    // 캡처가 프레임 중간에서 끝나는 것은 정상적인 상황이다(1차 프레이머와 같은 판단).
+    byte[] whole = S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16)));
+    byte[] stream = S7Fixtures.concat(whole, Arrays.copyOf(whole, whole.length - 3));
+
+    S7FramingResult r = S7Framer.frames(stream);
+
+    assertEquals(1, r.frames().size());
+    assertEquals(whole.length - 3, r.undecodedBytes());
+}
 
 @Test
 void COTP_분할이면_거기서_멈추고_분할을_표시한다() {
@@ -740,7 +805,14 @@ void COTP_분할이면_거기서_멈추고_분할을_표시한다() {
 
 @Test
 void 스트림_중간부터_시작해도_재동기화하지_않는다() {
-    // 앞에 쓰레기 4바이트. TPKT 매직이 어긋나므로 프레임 0개다.
+    // 앞에 이전 프레임의 꼬리 4바이트. TPKT 매직이 어긋나므로 프레임 0개다.
+    byte[] stream = S7Fixtures.concat(new byte[]{0x00, 0x02, 0x00, 0x01},
+        S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16))));
+
+    S7FramingResult r = S7Framer.frames(stream);
+
+    assertTrue(r.frames().isEmpty());
+    assertEquals(stream.length, r.undecodedBytes());
 }
 
 @Test
@@ -760,7 +832,7 @@ void Userdata도_프레임으로_센다() {
 
 - [ ] **Step 2: 실패 확인**
 
-Run: `mvn -q -pl decode -am test`
+Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: 컴파일 실패 — `S7Framer`·`S7FramingResult` 없음
 
 - [ ] **Step 3: 구현**
@@ -798,7 +870,7 @@ public record S7FramingResult(List<S7Frame> frames, int undecodedBytes, boolean 
 
 - [ ] **Step 4: 통과 확인**
 
-Run: `mvn -q -pl decode -am test`
+Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `S7FramerTest` `Tests run: 12, Failures: 0`
 
 - [ ] **Step 5: 커밋**
@@ -835,7 +907,10 @@ void A단계에서_제어_계열은_아직_UNDECIDABLE이다(int fc) {
 }
 
 @ParameterizedTest @ValueSource(ints = {0x00, 0x03, 0x99, -1})
-void 모르는_함수코드는_UNDECIDABLE이다(int fc) { }
+void 모르는_함수코드는_UNDECIDABLE이다(int fc) {
+    // -1 은 파라미터가 비어 함수코드를 못 읽은 프레임이다(S7Frame.functionCode 계약).
+    assertEquals(Access.UNDECIDABLE, S7Access.of(fc));
+}
 ```
 
 - [ ] **Step 2: 실패 확인** → 컴파일 실패
@@ -910,6 +985,20 @@ void 항목이_없는_함수는_함수코드만_적는다() {
 void 파라미터가_짧으면_지어내지_않는다() {
     assertEquals("fc:4", S7ObjectRef.of(new byte[]{0x04, 0x01, 0x12}));
 }
+
+@Test
+void 카운터와_타이머는_비트_주소가_없다() {
+    assertEquals("c3", S7ObjectRef.of(S7Fixtures.readVar(S7Fixtures.s7any(0x1C, 0, 3, 0))));
+    assertEquals("t7", S7ObjectRef.of(S7Fixtures.readVar(S7Fixtures.s7any(0x1D, 0, 7, 0))));
+}
+
+@Test
+void 첫_항목을_못_읽어도_항목_수는_적는다() {
+    // 항목이 여럿이라는 사실은 첫 항목을 읽었는지와 무관하다.
+    byte[] parameter = S7Fixtures.concat(new byte[]{0x04, 0x02, 0x12, 0x02, 0x77, 0x00},
+                                         S7Fixtures.sym(0, 0x52, 16));
+    assertEquals("fc:4 (+1)", S7ObjectRef.of(parameter));
+}
 ```
 
 - [ ] **Step 2: 실패 확인** → 컴파일 실패
@@ -924,12 +1013,22 @@ void 파라미터가_짧으면_지어내지_않는다() {
   `area1 == 0x0000 && area2 == 0x0052` 면 `sym:m/<lid>[/<lid>…]`, 아니면 `sym:0x<area1>:0x<area2>/<lid>…`.
   LID 값은 **하위 28비트**를 10진수로 쓴다(상위 4비트는 플래그다). LID 가 0개면 area 까지만 쓴다
 - **`syntaxId == 0x10`** — `transportSize(1) length(2) dbNumber(2) area(1) address(3)`.
-  area `0x84`→`db<n>.dbx<byte>.<bit>` · `0x83`→`m<byte>.<bit>` · `0x81`→`i…` · `0x82`→`q…` · 그 외 → `fc:<n>`.
-  `<byte> = address / 8`, `<bit> = address % 8`
-- 그 밖의 syntax id → `fc:<n>`
-- `itemCount > 1` 이면 뒤에 ` (+<itemCount-1>)`
+  `<byte> = address / 8`, `<bit> = address % 8`. 영역 코드는 설계 §5의 표를 **하나도 빠뜨리지 않는다**:
 
-- [ ] **Step 4: 통과 확인** — `Tests run: 9, Failures: 0`
+  | area | 표기 | 예 |
+  |---|---|---|
+  | `0x84` DB | `db<dbNumber>.dbx<byte>.<bit>` | `db1.dbx20.0` |
+  | `0x83` M | `m<byte>.<bit>` | `m20.3` |
+  | `0x81` I | `i<byte>.<bit>` | `i0.0` |
+  | `0x82` Q | `q<byte>.<bit>` | `q4.1` |
+  | `0x1C` C | `c<byte>` | `c3` — 카운터는 비트 주소가 없다 |
+  | `0x1D` T | `t<byte>` | `t7` |
+  | 그 외 | `fc:<n>` | 지어내지 않는다 |
+- 그 밖의 syntax id → `fc:<n>`
+- `itemCount > 1` 이면 뒤에 ` (+<itemCount-1>)`. **첫 항목을 못 읽어 `fc:<n>` 이 된 경우에도 붙인다** — 항목이 여럿이라는 사실은 첫 항목을 읽었는지와 무관하다
+- `fc:<n>` 의 `<n>` 은 **`parameter[0] & 0xFF`** 다. 부호 있는 byte 로 쓰면 `0xF0` 이 `-16` 으로 나온다
+
+- [ ] **Step 4: 통과 확인** — `Tests run: 11, Failures: 0`
 
 - [ ] **Step 5: 커밋**
 
@@ -947,6 +1046,30 @@ git commit -m "feat: S7 objectRef — 실캡처는 100% 1200SYM 이고 S7ANY 는
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/S7DecoderTest.java`
 
 테스트는 `TrafficObserver.observe(streams, List.of(new S7Decoder()))` 로 돌린다 — 해독기 단독이 아니라 순회기까지 함께 돌려야 계수 규칙이 검증된다.
+
+공통 헬퍼와 상수:
+
+```java
+    private static final String HMI = "10.0.1.20", PLC = "10.0.2.11";
+    private static final String A = "10.0.1.30", B = "10.0.2.40";
+
+    private static final byte[] READ_JOB =
+        S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16)));
+    private static final byte[] READ_ACK =
+        S7Fixtures.ackData(new byte[]{0x04, 0x01}, new byte[]{(byte) 0xFF, 4, 0, 2, 0, 1});
+
+    private static TcpStream stream(String src, int sport, String dst, int dport, byte[] bytes) {
+        return new TcpStream(Instant.EPOCH, src, sport, dst, dport, bytes, false, false, false);
+    }
+
+    private ObservationResult observe(TcpStream... streams) {
+        return TrafficObserver.observe(List.of(streams), List.of(new S7Decoder()));
+    }
+
+    private Diagnosed observeWithDiagnostics(TcpStream... streams) {
+        return TrafficObserver.observeWithDiagnostics(List.of(streams), List.of(new S7Decoder()));
+    }
+```
 
 - [ ] **Step 1: 실패하는 테스트 작성**
 
@@ -967,13 +1090,20 @@ void 요청만_관찰한다() {
 @Test
 void 응답만_잡힌_캡처는_판정하지_않는다() {
     // 1차 R5 에 해당하는 경우인데 S7 에는 별도 가드가 없다 — 요청 방향이 0 개라 자동으로 걸린다.
+    ObservationResult r = observe(stream(PLC, 102, HMI, 2000, READ_ACK));
+
+    assertEquals(1, r.observations().size());
+    assertEquals(Access.UNDECIDABLE, r.observations().get(0).access());
+    assertEquals(1, r.undecidableConversations());
+    assertEquals(0, r.decodedConversations());
 }
 
 @Test
 void 양쪽_방향에_모두_요청이_있으면_판정하지_않는다() {
+    // 한 4-tuple 에 연결이 둘 묶였거나 재조립이 어긋난 것이다. 다수결로 밀어붙이지 않는다.
     Diagnosed d = observeWithDiagnostics(
-        stream(A, 102, B, 102, S7Fixtures.job(...)),
-        stream(B, 102, A, 102, S7Fixtures.job(...)));
+        stream(A, 102, B, 102, READ_JOB),
+        stream(B, 102, A, 102, READ_JOB));
     assertEquals(1, d.result().observations().size());
     assertEquals(Access.UNDECIDABLE, d.result().observations().get(0).access());
     assertEquals(1, d.result().undecidableConversations());
@@ -983,7 +1113,7 @@ void 양쪽_방향에_모두_요청이_있으면_판정하지_않는다() {
 @Test
 void 응답만_잡힌_경우는_양방향_요청으로_세지_않는다() {
     // 위 테스트의 짝. 둘 다 client == null 이지만 원인이 다르다.
-    Diagnosed d = observeWithDiagnostics(stream(PLC, 102, HMI, 2000, S7Fixtures.ackData(...)));
+    Diagnosed d = observeWithDiagnostics(stream(PLC, 102, HMI, 2000, READ_ACK));
     assertEquals(1, d.result().undecidableConversations());
     assertEquals(0, d.bothDirectionRequestConversations());
 }
@@ -1000,7 +1130,17 @@ void Userdata만_실린_대화는_UNDECIDABLE_대화다() {
 
 @Test
 void Job과_Userdata가_섞이면_해독하고_꼬리를_하나_남긴다() {
-    // Userdata 가 몇 개든, 어느 방향이든 꼬리는 한 건이다.
+    // Userdata 가 몇 개든 꼬리는 한 건이다 — 프레임 수와 무관하다(설계 §5).
+    byte[] userdata = S7Fixtures.userdata(new byte[]{0x00, 0x01, 0x12, 0x04});
+    ObservationResult r = observe(stream(HMI, 2000, PLC, 102,
+        S7Fixtures.concat(READ_JOB, userdata, userdata)));
+
+    assertEquals(2, r.observations().size(), "Job 관찰 1 + 꼬리 1");
+    assertEquals(Access.READ, r.observations().get(0).access());
+    assertEquals(Access.UNDECIDABLE, r.observations().get(1).access());
+    assertEquals("-", r.observations().get(1).objectRef());
+    assertEquals(1, r.decodedConversations());
+    assertEquals(0, r.undecidableConversations());
 }
 
 @Test
@@ -1016,7 +1156,15 @@ void 응답_방향의_Userdata도_꼬리를_만든다() {
 }
 
 @Test
-void COTP_분할도_꼬리를_만든다() { }
+void COTP_분할도_꼬리를_만든다() {
+    // 분할은 재조립하지 않는다(설계 §2). 그러나 못 본 것이 있다는 사실은 남긴다.
+    ObservationResult r = observe(stream(HMI, 2000, PLC, 102, S7Fixtures.concat(
+        READ_JOB, S7Fixtures.fragmented(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 17))))));
+
+    assertEquals(2, r.observations().size(), "Job 관찰 1 + 꼬리 1");
+    assertEquals(Access.UNDECIDABLE, r.observations().get(1).access());
+    assertEquals(1, r.decodedConversations());
+}
 
 @Test
 void 연결설정만_오간_대화는_대상_외다() {
@@ -1028,6 +1176,11 @@ void 연결설정만_오간_대화는_대상_외다() {
 @Test
 void 포트가_102가_아니어도_해독한다() {
     // S7 도 Modbus 와 같다 — 우회하는 사람은 포트를 바꾼다.
+    ObservationResult r = observe(stream(HMI, 50001, PLC, 40102, READ_JOB));
+
+    assertEquals(1, r.observations().size());
+    assertEquals(Access.READ, r.observations().get(0).access());
+    assertEquals(1, r.decodedConversations());
 }
 ```
 
@@ -1035,9 +1188,14 @@ void 포트가_102가_아니어도_해독한다() {
 
 - [ ] **Step 3: `Protocol` 에 상수 추가 — §7 예산의 나머지 절반**
 
+**열거형 선언 줄에 `, S7COMM` 만 더한다. 위의 6줄 javadoc 은 그대로 둔다.** 파일을 통째로 갈아치우면 §7 측정이 `Protocol.java | 10 +++---` 로 부풀어, 이 계획이 존재하는 이유인 그 측정이 흐려진다.
+
 ```java
 public enum Protocol { MODBUS_TCP, S7COMM }
 ```
+
+Run: `git diff --stat -- reconcile/src/main`
+Expected: `Protocol.java | 2 +-`
 
 - [ ] **Step 4: `S7Decoder` 구현**
 
@@ -1085,10 +1243,23 @@ final class S7Decoder implements ProtocolDecoder {
         }
         return new Decoded(observations, client, unread, false);
     }
+
+    /** ModbusDecoder.observationOf 와 같은 모양이다 — 프로토콜과 매핑 함수만 다르다. */
+    private static Observation observationOf(TcpStream stream, S7Frame frame) {
+        return new Observation(
+            stream.at(),
+            new Endpoint(stream.sourceAddress(), stream.sourcePort()),
+            new Endpoint(stream.targetAddress(), stream.targetPort()),
+            Protocol.S7COMM,
+            S7Access.of(frame.functionCode()),
+            S7ObjectRef.of(frame.parameter()));   // 함수코드가 아니라 **파라미터 전체**를 넘긴다
+    }
 }
 ```
 
 > **S1·S2·R1~R5 가 여기 없다.** 프레임이 스스로 요청임을 선언하므로 SYN 도 PDU 형태도 필요 없다. 1차가 신호 둘과 결합 규칙 다섯 줄로 하던 일을 필드 하나가 대신한다.
+
+> **속도 주의.** 순회기는 모든 해독기의 `scan`을 모든 스트림에 돌리고 단축 평가를 하지 않는다. 151022의 대상 외 대화 93만 개가 이제 `S7Framer`도 통과하고, `ModbusDecoder`는 스트림당 최대 네 번(스캔 1 + 형태 신호 N + 클라이언트 1) 프레이밍한다. 1차의 2.6초 기준선보다 눈에 띄게 느려질 수 있다 — **멈춘 게 아니다.** 실제로 문제가 되면 그때 측정해서 다루고, 지금 미리 최적화하지 않는다.
 
 - [ ] **Step 5: 통과 확인** — `S7DecoderTest` `Tests run: 10, Failures: 0`
 
@@ -1122,30 +1293,46 @@ void 한_캡처에_두_프로토콜이_섞여도_계수의_합이_전체_대화_
 @Test
 void 두_프로토콜의_관찰이_한_목록에_섞여_나온다() {
     // 프로토콜별 분리는 하지 않는다(설계 §6) — 같은 칸에 센다.
+    ObservationResult r = TrafficObserver.observe(List.of(modbusStream, s7Stream));
+
+    assertEquals(2, r.observations().size());
+    assertEquals(Set.of(Protocol.MODBUS_TCP, Protocol.S7COMM),
+        r.observations().stream().map(Observation::protocol).collect(toSet()));
 }
 
 @Test
 void 어떤_바이트열도_두_프레이머에_동시에_걸리지_않는다() {
-    // 예시 몇 개로 "증명"하지 않는다. 오프셋 0 의 바이트 2~3 이 두 프레이머가 서로 모순되게
-    // 제약하는 유일한 자리이므로 그 65,536 개 값을 전부 돌린다.
-    // 각 값마다 나머지가 유효한 MBAP 후보와 유효한 TPKT/COTP/S7 후보를 만들고,
-    // **두 실제 프레이머를 그 위에 돌린다** — 테스트가 수용 조건을 재구현하면
-    // 구현이 아니라 테스트의 사본을 검증하게 된다.
+    // 오프셋 0 의 바이트 2~3 은 MBAP 에선 프로토콜 ID(반드시 0), TPKT 에선 전체 길이(>= 7)다.
+    // 두 프레이머가 **서로 모순되게** 제약하는 유일한 자리이므로 그 65,536 개 값을 전부 돌린다.
+    //
+    // 고정 프레임의 두 바이트만 덮어쓰면 나머지가 그 값에 대해 무효가 되어 사실상 두 경우만
+    // 검사하게 된다. **값마다 나머지가 유효한 후보를 새로 만들어야** 시험이 된다.
     for (int value = 0; value <= 0xFFFF; value++) {
-        byte[] mbapCandidate = ModbusFixtures.mbap(1, 1, 3, ModbusFixtures.pdu(0, 2));
-        mbapCandidate[2] = (byte) (value >>> 8);
-        mbapCandidate[3] = (byte) value;
+        // ① MBAP 후보 — protocolId 자리만 value 로 두고 나머지는 유효하게 유지한다.
+        //    tid 를 0x0300 으로 잡아 앞 두 바이트가 TPKT 매직(03 00)과 같아지게 한다:
+        //    동시 수용이 가능하다면 여기서 걸린다.
+        byte[] mbap = ModbusFixtures.mbap(0x0300, 1, 3, ModbusFixtures.pdu(0, 2));
+        mbap[2] = (byte) (value >>> 8);
+        mbap[3] = (byte) value;
+        assertFalse(claimedByBoth(mbap), "MBAP 후보 protocolId=0x" + Integer.toHexString(value));
 
-        byte[] s7Candidate = S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16)));
-        s7Candidate[2] = (byte) (value >>> 8);
-        s7Candidate[3] = (byte) value;
-
-        for (byte[] candidate : List.of(mbapCandidate, s7Candidate)) {
-            boolean modbus = !ModbusFramer.frames(candidate).frames().isEmpty();
-            boolean s7 = !S7Framer.frames(candidate).frames().isEmpty();
-            assertFalse(modbus && s7, "value=0x" + Integer.toHexString(value));
+        // ② S7 후보 — TPKT 길이가 **실제로** value 인 프레임을 만든다.
+        //    전체 = 4(TPKT) + 3(COTP) + 10(S7 헤더) + 파라미터 → 파라미터 = value - 17.
+        //    value < 18 이면 유효한 S7 프레임이 존재하지 않으므로 만들지 않는다.
+        if (value >= 18) {
+            byte[] parameter = new byte[value - 17];
+            parameter[0] = 0x04;
+            byte[] s7 = S7Fixtures.job(parameter);
+            assertEquals(value, ((s7[2] & 0xFF) << 8) | (s7[3] & 0xFF), "픽스처가 길이를 맞췄는가");
+            assertFalse(claimedByBoth(s7), "S7 후보 TPKT len=" + value);
         }
     }
+}
+
+/** 두 **실제** 프레이머를 돌린다 — 수용 조건을 테스트가 재구현하면 사본을 검증하게 된다. */
+private boolean claimedByBoth(byte[] candidate) {
+    return !ModbusFramer.frames(candidate).frames().isEmpty()
+        && !S7Framer.frames(candidate).frames().isEmpty();
 }
 
 @Test
@@ -1169,10 +1356,10 @@ void 한_대화의_두_방향이_서로_다른_해독기에_걸리면_등록_순
 
 - [ ] **Step 4: 통과 확인**
 
-Run: `mvn -q test`
+Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`. `CoexistenceTest` `Tests run: 4`. **기존 157건 + 신규 전부 통과이며 기존 테스트 파일은 여전히 무변경이다.**
 
-Run: `git diff --stat decode/src/test/java/dev/krillin/huginn/decode/ModbusObserverTest.java cli/src/test`
+Run: `git diff HEAD --stat -- decode/src/test/java/dev/krillin/huginn/decode/ModbusObserverTest.java cli/src/test`
 Expected: 빈 출력
 
 - [ ] **Step 5: 커밋**
@@ -1220,10 +1407,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * 4SICS 실캡처 회귀·진단. {@code HUGINN_SAMPLES} 가 캡처 디렉터리를 가리킬 때만 돈다 —
  * 캡처는 라이선스가 제각각이라 저장소에 넣지 않는다.
  *
- * <pre>HUGINN_SAMPLES=samples mvn -pl decode -am test -Dtest=RealCaptureTest</pre>
+ * <pre>
+ * # PowerShell
+ * $env:HUGINN_SAMPLES = "samples"
+ * mvn -pl decode -am test -Dtest=RealCaptureTest -Dsurefire.failIfNoSpecifiedTests=false
+ * </pre>
  */
 @EnabledIfEnvironmentVariable(named = "HUGINN_SAMPLES", matches = ".+")
 class RealCaptureTest {
+
+    private static final List<String> CAPTURES = List.of(
+        "4SICS-GeekLounge-151020.pcap",
+        "4SICS-GeekLounge-151021.pcap",
+        "4SICS-GeekLounge-151022.pcap");
+
+    private static ObservationResult s7Only(String capture) throws Exception {
+        return TrafficObserver.observe(streamsOf(capture), List.of(new S7Decoder()));
+    }
+
+    private static long undecidableCount(ObservationResult r) {
+        return r.observations().stream().filter(o -> o.access() == Access.UNDECIDABLE).count();
+    }
+
+    /** 프레임에서 나온 관찰만 센다 — 순회기가 만든 관찰은 objectRef 가 "-" 다. */
+    private static long frameObservations(ObservationResult r) {
+        return r.observations().stream().filter(o -> !"-".equals(o.objectRef())).count();
+    }
 
     private static List<TcpStream> streamsOf(String capture) throws Exception {
         Path path = Path.of(System.getenv("HUGINN_SAMPLES"), capture);
@@ -1240,16 +1449,31 @@ class RealCaptureTest {
         assertEquals(56, r.decodedConversations());
         assertEquals(932_655, r.skippedConversations());
         assertEquals(24, r.undecidableConversations());
-        assertEquals(48, countUndecidable(r), "UNDECIDABLE 관찰");
+        assertEquals(48, undecidableCount(r), "UNDECIDABLE 관찰");
         assertEquals(49_767, r.observations().size(), "관찰 총수");
     }
 
     @Test
-    void S7_관찰_수가_tshark_Job_수와_맞는다() throws Exception {
-        // 차이가 나면 설계 §8 의 네 원인 중 무엇인지 대화 단위로 설명해야 한다. 숨기지 않는다.
-        assertEquals(23_732, s7Observations("4SICS-GeekLounge-151020.pcap"));
-        assertEquals(86_403, s7Observations("4SICS-GeekLounge-151021.pcap"));
-        assertEquals(53_217, s7Observations("4SICS-GeekLounge-151022.pcap"));
+    void S7_프레임_관찰_수가_tshark_Job_수와_맞는다() throws Exception {
+        // **총 관찰 수가 아니라 프레임에서 나온 관찰**을 센다. 순회기가 붙이는 꼬리·판정불가
+        // 관찰은 objectRef 가 "-" 라 걸러진다. 설계 §8 이 "Job 수 = 관찰 수" 를 명시적으로
+        // 부정하므로 총수로 단언하면 151021(Userdata 4건 → 꼬리)에서 반드시 틀린다.
+        assertEquals(23_732, frameObservations(s7Only("4SICS-GeekLounge-151020.pcap")));
+        assertEquals(86_403, frameObservations(s7Only("4SICS-GeekLounge-151021.pcap")));
+        assertEquals(53_217, frameObservations(s7Only("4SICS-GeekLounge-151022.pcap")));
+    }
+
+    @Test
+    void 총_관찰_수와_Job_수의_차이를_기록한다() throws Exception {
+        // 총 관찰 = 프레임 관찰 + 꼬리 + 판정 불가. 이 차이는 정상이며 설계 §8 의 네 원인으로
+        // 설명하는 대상이다. 단언하지 않고 찍어서 samples/README.md 로 옮긴다.
+        for (String capture : CAPTURES) {
+            ObservationResult r = s7Only(capture);
+            System.out.printf("%s: 총 관찰 %d · 프레임 관찰 %d · UNDECIDABLE 관찰 %d · "
+                    + "해독 대화 %d · UNDECIDABLE 대화 %d%n",
+                capture, r.observations().size(), frameObservations(r), undecidableCount(r),
+                r.decodedConversations(), r.undecidableConversations());
+        }
     }
 
     @Test
@@ -1275,17 +1499,24 @@ class RealCaptureTest {
 }
 ```
 
-> `s7Observations`는 S7 해독기만 등록해 돌린 뒤 `Access` 가 `UNDECIDABLE` 이 아닌 관찰과 `UNDECIDABLE` 관찰을 합쳐 센다 — Job 프레임 하나가 관찰 하나이므로 총수가 기준이다. **첫 실행에서 어긋나면 값을 고치지 말고 원인을 찾는다.**
+> **기대값이 어긋나면 값을 고치지 말고 원인을 찾는다.** 다만 무엇이 어긋난 것인지 구별한다 — `frameObservations`가 tshark Job 수와 다르면 프레이밍이나 방향 판정 문제이고(설계 §9의 반증 조건), **총 관찰 수가 Job 수보다 큰 것은 정상**이다(꼬리·판정 불가 관찰). 후자를 버그로 쫓지 않는다.
 
 - [ ] **Step 2: 캡처 없이 도는지 확인 — 건너뛰어야 한다**
 
-Run: `mvn -q -pl decode -am test`
+Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `RealCaptureTest` 가 skip 되고 나머지는 그대로 통과. CI 에서 캡처 없이도 초록이다.
 
 - [ ] **Step 3: 캡처를 물려 실행**
 
-Run: `HUGINN_SAMPLES=samples mvn -pl decode -am test -Dtest=RealCaptureTest`
-Expected: 첫 세 테스트 통과, 네 번째는 수치를 찍는다.
+Run (PowerShell):
+```powershell
+$env:HUGINN_SAMPLES = "samples"
+mvn -pl decode -am test -Dtest=RealCaptureTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+**`-Dsurefire.failIfNoSpecifiedTests=false` 가 없으면 실패한다** — `-am` 이 상류 모듈(`huginn-reconcile`)에도 필터를 적용하는데 거기엔 그 이름의 테스트가 없어 빌드가 깨진다.
+
+Expected: 회귀·프레임 관찰·배타성 테스트 통과, 나머지 둘은 수치를 찍는다.
 
 **Modbus 회귀가 깨지면 여기서 멈춘다.** 순회기를 뽑아내면서 Modbus 고유 로직을 함께 옮긴 것이므로, 원인을 찾기 전에는 다음으로 가지 않는다.
 
@@ -1337,7 +1568,21 @@ for f in 151020 151021 151022; do
 done
 ```
 
-- [ ] **Step 4: `samples/README.md` 를 다시 쓴다**
+- [ ] **Step 4: 반증 조건 두 개를 실제로 측정한다**
+
+설계 §8이 시험 방법까지 정해둔 것인데 앞 태스크의 어느 스텝도 이 수치를 만들지 않는다.
+
+**① 1200SYM 표기 대조** — 렌더링 문자열이 아니라 **필드로** 맞춘다:
+
+```bash
+tshark -r samples/4SICS-GeekLounge-151020.pcap -Y "s7comm.header.rosctr==1"        -T fields -E occurrence=f -e s7comm.tiap.item.area1 -e s7comm.tiap.item.area2        -e s7comm.tiap.item.value | sort | uniq -c | head
+```
+
+Huginn 의 `objectRef` 분포와 맞춘다 — `area2` `0x0052` 와 LID 값이 `sym:m/<lid>` 의 `<lid>` 와 같아야 한다. 어긋나면 설계 §9의 네 번째 반증 조건이 발동한다.
+
+**② 응답이 0건 관찰인지** — `RealCaptureTest`의 `frameObservations`가 tshark 의 ROSCTR 1 수와 정확히 같다는 것이 곧 이 증명이다(응답이 하나라도 관찰됐다면 그 수를 넘는다). 확인한 사실로 기록한다.
+
+- [ ] **Step 5: `samples/README.md` 를 다시 쓴다**
 
 갱신할 것:
 - 결과표 여섯 수치 — **갱신 후 값**으로
@@ -1346,7 +1591,7 @@ done
 - 판정 문단에 **151020 의 반전**을 적는다: 1차에서 "Modbus 가 한 프레임도 없다"고 기록한 캡처가 이제 2.3만 관찰을 낸다. 1차의 §10 판정("데이터셋의 Modbus 비중이 얇아 캡처 하나로만 시험됐다")이 **S7 을 붙이자 해소되었는지**를 여기서 다시 판정한다
 - **여전히 미검증인 것**: S7ANY 주소 경로(실캡처 0건), `area1 != 0` 경로, CONTROL 계열(B단계), 비표준 포트 S7
 
-- [ ] **Step 5: 커밋**
+- [ ] **Step 6: 커밋**
 
 ```bash
 git add samples
@@ -1366,12 +1611,12 @@ git commit -m "test: S7 을 켠 실캡처 결과를 다시 기록한다"
 
 Run:
 ```bash
-git diff --stat <A단계-시작-커밋>..HEAD -- pcap/src/main contract/src/main reconcile/src/main cli/src/main
+git diff --stat $BASE..HEAD -- pcap/src/main contract/src/main reconcile/src/main cli/src/main
 ```
 
 Expected(합격): 두 파일뿐이고 합계 4줄 안팎
 ```
- cli/src/main/java/dev/krillin/huginn/cli/Pipeline.java | 3 ++--
+ cli/src/main/java/dev/krillin/huginn/cli/Pipeline.java             | 6 +++---
  reconcile/src/main/java/dev/krillin/huginn/reconcile/Protocol.java | 2 +-
 ```
 
@@ -1414,7 +1659,7 @@ git commit -m "docs: 이음매 판정 결과와 2차 README"
 
 - [ ] `mvn test` 전체 통과
 - [ ] **`ModbusObserverTest`·`EndToEndTest`·`ExamplePolicyTest` 가 한 줄도 고쳐지지 않았다**
-      Run: `git diff --stat <시작>..HEAD -- decode/src/test/java/dev/krillin/huginn/decode/ModbusObserverTest.java cli/src/test` → Expected: 빈 출력
+      Run: `git diff --stat $BASE..HEAD -- decode/src/test/java/dev/krillin/huginn/decode/ModbusObserverTest.java cli/src/test` → Expected: 빈 출력
 - [ ] **프로덕션 소스 변경이 `Protocol` 상수 하나와 `Pipeline` 세 줄뿐이다** — 넘었으면 넘은 대로 기록했다
 - [ ] **`decode` 밖 어디에도 S7 지식이 없다**
       Run: `grep -rn "TPKT\|COTP\|ROSCTR\|rosctr\|0x32\|1200SYM\|S7Framer" --include=*.java pcap/src/main contract/src/main reconcile/src/main cli/src/main` → Expected: 히트 0건
@@ -1426,4 +1671,7 @@ git commit -m "docs: 이음매 판정 결과와 2차 README"
 - [ ] **어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다** — 65,536 값 전수, 실제 프레이머로
 - [ ] 다중 주장 횟수를 세 캡처에서 측정해 기록했다
 - [ ] 세 정책 파일과 `samples/README.md` 가 갱신되어 기록된 수치가 실제와 맞는다
+- [ ] **1200SYM 표기를 tshark 의 `area2`·LID 필드와 대조했다** — 렌더링 문자열이 아니라 필드로
+- [ ] **빈 본문 테스트가 하나도 없다** — 단언 없는 테스트는 초록으로 통과하면서 아무것도 지키지 않는다
+      Run: `grep -n "() {$" -A1 decode/src/test/java/dev/krillin/huginn/decode/S7*.java | grep -B1 "^\s*}$"` → Expected: 히트 0건
 - [ ] 1차 설계 §10 의 네 번째 조건과 2차 설계 §9 의 다섯 조건이 **전부 판정되어 기록**되었다
