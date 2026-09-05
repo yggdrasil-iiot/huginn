@@ -374,6 +374,25 @@ class PolicyLoaderTest {
     }
 
     @Test
+    void 규칙에_protocol이_없으면_즉시_실패한다() {
+        // Jackson 은 키가 없으면 null 을 준다. 검사하지 않으면 예외가 아니라
+        // Key(from, to, null) 이 만들어져 그 규칙이 말없이 무효가 된다 —
+        // 선언한 통신이 전부 위반으로 쏟아진다. 조용한 이상이 시끄러운 실패보다 나쁘다.
+        PolicyException e = assertThrows(PolicyException.class,
+            () -> PolicyLoader.parse(VALID.replace("    protocol: MODBUS_TCP
+", "")));
+        assertTrue(e.getMessage().contains("hmi-01"), "어느 규칙이 문제인지 메시지에 있어야 한다");
+    }
+
+    @Test
+    void 규칙에_access가_없으면_NPE가_아니라_계약_오류다() {
+        // addAll(null) 이 던지는 NPE 는 Task 14 의 종료 코드 매핑을 빠져나간다.
+        assertThrows(PolicyException.class,
+            () -> PolicyLoader.parse(VALID.replace("    access: [READ, WRITE]
+", "")));
+    }
+
+    @Test
     void 같은_쌍의_규칙이_둘이면_access를_합친다() {
         // Map.put 으로 덮으면 앞의 READ 가 말없이 사라져 정상 통신이 위반으로 보고된다.
         CommunicationPolicy p = PolicyLoader.parse(VALID + """
@@ -419,7 +438,11 @@ record PolicyDocument(int version, List<Peer> peers, List<Rule> allowed) {
 
 1. `new ObjectMapper(new YAMLFactory())` — `FAIL_ON_UNKNOWN_PROPERTIES`는 기본이 켜짐이므로 **끄지 않는다.**
 2. **Jackson이 던지는 모든 예외(`JacksonException`)를 `PolicyException`으로 감싼다.** 감싸지 않으면 `알_수_없는_필드`·`깨진_YAML` 테스트가 `UnrecognizedPropertyException`/`JsonParseException`을 받아 실패한다.
-3. 검증 — `version != 1`, `peers`/`allowed` null, peer id 중복, peer address 중복, `allowed`의 `from`/`to`가 미선언 id. **실패 메시지에 문제된 id나 주소를 포함한다.**
+3. 검증 — `version != 1`, `peers`/`allowed` null, peer id 중복, peer address 중복, `allowed`의 `from`/`to`가 미선언 id, **`allowed` 항목의 `protocol`·`access` null**. **실패 메시지에 문제된 id나 주소를 포함한다.**
+
+   마지막 둘이 필요한 이유. YAML에서 키를 빠뜨리면 Jackson은 예외가 아니라 **null**을 준다.
+   - `access:` 누락 → 합집합 merge에서 `addAll(null)`이 **NPE**다. Task 14는 `PolicyException`·`PcapException`만 잡아 종료 코드 2로 매핑하므로 날 NPE는 그 그물을 빠져나가 스택 트레이스로 죽는다 — 설계 §7의 "계약 오류는 즉시, **정의된 방식으로** 실패"가 깨진다.
+   - `protocol:` 누락 → 예외가 아니라 `Key(from, to, null)`이 만들어진다. 어떤 관찰과도 매칭되지 않으므로 **그 규칙이 말없이 무효가 되고 선언한 통신이 전부 위반으로 보고된다.** 조용한 이상이라 앞의 것보다 위험하다.
 4. `(fromAddress, toAddress, protocol) → Set<Access>` 조회표를 만들어 `CommunicationPolicy`를 반환한다. **같은 키가 두 번 나오면 `Map.put`으로 덮지 말고 access 집합을 합집합으로 merge한다** — 덮으면 앞의 `access: [READ]`가 말없이 사라져 정상 통신이 위반으로 보고된다. 다른 중복(peer id·주소)은 전부 즉시 실패시키면서 이것만 조용히 덮이는 것은 이 계약의 기조에 어긋난다. 주소→id 역인덱스는 **판정에 쓰이지 않는다** — 조회표가 이미 주소로 키를 잡는다. 역인덱스의 용도는 3의 주소 중복 검증과 사람이 읽는 오류 메시지뿐이므로, 그 둘에 필요한 만큼만 만든다.
 
 `CommunicationPolicy`와 `PolicyLoader`는 **`public` 클래스**다(청크 3의 `cli`가 둘 다 부른다). `CommunicationPolicy`는 **`public boolean allows(String, String, Protocol, Access)` 하나만 노출**한다. `Access.UNDECIDABLE`이 들어오면 **조회 전에 false**를 반환한다.
@@ -429,7 +452,7 @@ record PolicyDocument(int version, List<Peer> peers, List<Rule> allowed) {
 - [ ] **Step 4: 통과 확인**
 
 Run: `mvn -pl contract -am test`
-Expected: `contract` 모듈 `Tests run: 11, Failures: 0`. (`-am` 때문에 `reconcile`의 1건도 함께 돌아 리액터 총합은 12이다.)
+Expected: `contract` 모듈 `Tests run: 13, Failures: 0`. (`-am` 때문에 `reconcile`의 1건도 함께 돌아 리액터 총합은 14이다.)
 
 - [ ] **Step 5: 커밋**
 
@@ -667,7 +690,7 @@ Expected: 컴파일 실패 — `CommunicationPolicy`가 아직 `PolicyView`가 �
 - [ ] **Step 4: 통과 확인**
 
 Run: `mvn test`
-Expected: 전체 `BUILD SUCCESS`, `contract` 12건 + `reconcile` 9건. **`pcap`·`decode`·`cli` 세 모듈은 아직 테스트가 0건이며 그게 정상이다** — 소스가 없는 모듈의 빈 surefire 실행은 실패가 아니다.
+Expected: 전체 `BUILD SUCCESS`, `contract` 14건 + `reconcile` 9건. **`pcap`·`decode`·`cli` 세 모듈은 아직 테스트가 0건이며 그게 정상이다** — 소스가 없는 모듈의 빈 surefire 실행은 실패가 아니다.
 
 - [ ] **Step 5: 커밋**
 
