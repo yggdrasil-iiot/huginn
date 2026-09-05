@@ -35,6 +35,18 @@ class ModbusObjectRefTest {
     }
 
     @Test
+    void 장치식별_조회는_읽기_코드까지_적는다() {
+        // tshark 의 modbus.read_device_id 와 대조되는 값이다 — 실캡처에 코드 1·2 가 나타난다.
+        assertEquals("device-id:1", ModbusObjectRef.of(43, new byte[]{0x0E, 0x01, 0x00}));
+        assertEquals("device-id:2", ModbusObjectRef.of(43, new byte[]{0x0E, 0x02, 0x00}));
+    }
+
+    @Test
+    void MEI가_14가_아니면_함수코드만_적는다() {
+        assertEquals("fc:43", ModbusObjectRef.of(43, new byte[]{0x0D, 0x01}));
+    }
+
+    @Test
     void 시작_주소를_읽을_수_없는_함수코드는_함수코드만_적는다() {
         // FC 8(진단), 43(캡슐화) 등은 PDU 에 주소가 없다.
         assertEquals("fc:8", ModbusObjectRef.of(8, new byte[]{0x00, 0x00}));

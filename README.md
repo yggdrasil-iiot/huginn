@@ -2,7 +2,7 @@
 
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
 ![Build](https://img.shields.io/badge/build-Maven%20multi--module-blue)
-![Tests](https://img.shields.io/badge/tests-233-brightgreen)
+![Tests](https://img.shields.io/badge/tests-239-brightgreen)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 **[Yggdrasil](https://github.com/yggdrasil-iiot) IIoT 스파인의 관찰·대사 축 — 선언한 것과 실제로 오간 것을 맞춰 본다.** Modbus/TCP 와 S7comm 을 읽는다.
@@ -75,7 +75,7 @@ Huginn — 통신 대사 결과
 | **요청만** 관찰한다 — 응답을 관찰하면 정상 통신이 전부 위반이 된다 | `ModbusObserverTest.요청만_Observation이_된다` |
 | 한 방향만 잡힌 캡처는 요청으로 **단정하지 않는다** | `ModbusObserverTest.한_방향만_잡힌_캡처는_요청으로_단정하지_않는다` |
 | SYN 과 PDU 형태가 어긋나면 어느 쪽도 믿지 않는다 | `ModbusObserverTest.SYN과_형태가_어긋나면_판정하지_않는다` |
-| 모르는 함수코드는 조용히 READ 로 치지 않는다 — FC 43 은 MEI 를 보지 않으므로 `UNDECIDABLE` | `ModbusAccessTest.캡슐화_전송은_UNDECIDABLE이다` |
+| 모르는 것을 조용히 READ 로 치지 않는다 — FC 43 은 **MEI 14 만** READ 이고 MEI 13(읽기·쓰기 겸용)은 `UNDECIDABLE` | `ModbusAccessTest.장치식별_조회는_읽기다` · `CANopen_전송은_여전히_UNDECIDABLE이다` |
 | 산업 프로토콜이 아닌 스트림은 `UNDECIDABLE` 이 아니라 **대상 외**다 | `EndToEndTest.비산업_트래픽은_UNDECIDABLE이_아니라_대상_외로_센다` |
 | 대화 계수 셋의 합이 전체 대화 수다 — 어느 대화도 빠지거나 두 번 세이지 않는다 | `ModbusObserverTest.대화_수는_세_계수의_합과_같다` · `클라이언트_방향만_프레임을_못_뽑은_대화도_어딘가에_센다` |
 | 같은 입력에 같은 리포트가 나온다 | `EndToEndTest.같은_입력에_같은_리포트가_나온다` |
@@ -119,8 +119,8 @@ cli/        진입점과 리포트
 mvn test
 ```
 
-233 건 중 6 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
-캡처 없이는 건너뛰므로 기본 실행은 227 건이다 — `samples/README.md` 참조.
+239 건 중 7 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
+캡처 없이는 건너뛰므로 기본 실행은 232 건이다 — `samples/README.md` 참조.
 
 설계와 구현 계획은 [`docs/superpowers/`](docs/superpowers/) 아래에 있다.
 
