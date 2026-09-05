@@ -40,7 +40,7 @@
 - Create: `pom.xml`
 - Create: `reconcile/pom.xml`, `contract/pom.xml`, `pcap/pom.xml`, `decode/pom.xml`, `cli/pom.xml`
 
-- [ ] **Step 1: 부모 POM 작성**
+- [x] **Step 1: 부모 POM 작성**
 
 `pom.xml` — Bifrost 관례를 따른다(`dev.krillin.*`, `maven.compiler.release=17`, 버전은 부모에 집중).
 
@@ -127,7 +127,7 @@
 </project>
 ```
 
-- [ ] **Step 2: 모듈 POM 5개 작성**
+- [x] **Step 2: 모듈 POM 5개 작성**
 
 **artifactId 규칙: `huginn-<디렉터리명>`.** 모두 부모를 상속하고 아래 의존만 더한다(JUnit은 부모에서 상속되므로 어디에도 다시 적지 않는다).
 
@@ -159,12 +159,12 @@
 
 모듈 간 의존은 `${project.groupId}` / `${project.version}`을 쓴다.
 
-- [ ] **Step 3: 리액터 해석 확인**
+- [x] **Step 3: 리액터 해석 확인**
 
 Run: `mvn -DskipTests package`
 Expected: `BUILD SUCCESS`. 5개 모듈이 리액터에 잡히고 모듈 간 참조가 해석되어야 한다. (`-q`는 성공 메시지를 감추므로 여기서는 쓰지 않는다.)
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add pom.xml reconcile/pom.xml contract/pom.xml pcap/pom.xml decode/pom.xml cli/pom.xml
@@ -182,7 +182,7 @@ git commit -m "build: Maven 멀티모듈 골격 5개"
 - Create: `reconcile/src/main/java/dev/krillin/huginn/reconcile/Observation.java`
 - Test: `reconcile/src/test/java/dev/krillin/huginn/reconcile/EndpointTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 값 타입 자체는 테스트하지 않는다. 유일하게 로직이 있는 것은 `Endpoint` 표기다.
 
@@ -200,12 +200,12 @@ class EndpointTest {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl reconcile test`
 Expected: 컴파일 실패 — `Endpoint` 심볼을 찾을 수 없음
 
-- [ ] **Step 3: 최소 구현**
+- [x] **Step 3: 최소 구현**
 
 ```java
 package dev.krillin.huginn.reconcile;
@@ -263,12 +263,12 @@ public record Observation(
 ) {}
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl reconcile test`
 Expected: `Tests run: 1, Failures: 0, Errors: 0`
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add reconcile/src
@@ -286,7 +286,7 @@ git commit -m "feat: Observation 이음매 타입"
 - Create: `contract/src/main/java/dev/krillin/huginn/contract/PolicyDocument.java`
 - Test: `contract/src/test/java/dev/krillin/huginn/contract/PolicyLoaderTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 계약 오류는 **즉시 실패**다(설계 §7). 잘못된 계약을 통과시키면 deny-by-default 때문에 전부 위반으로 쏟아진다.
 
@@ -409,12 +409,12 @@ class PolicyLoaderTest {
 
 > 마지막 테스트는 `VALID`의 `allowed` 목록에 항목을 하나 덧붙인다. `VALID`가 `allowed` 항목으로 끝나야 하고 이어붙이는 텍스트 블록의 들여쓰기가 그 항목과 맞아야 한다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl contract -am test`
 Expected: 컴파일 실패 — `CommunicationPolicy`·`PolicyLoader`·`PolicyException` 심볼 없음(`Access`·`Protocol`은 이미 있다)
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `public class PolicyException extends RuntimeException`. 생성자는 `public PolicyException(String)`과 Jackson 예외 포장용 `public PolicyException(String, Throwable)` 둘. **`public`이어야 한다** — 청크 3의 `Huginn.run`(`cli` 패키지)이 이것을 잡아 종료 코드 2로 매핑한다. 청크 1 안에서는 `PolicyLoaderTest`가 같은 패키지라 끝까지 드러나지 않는다.
 
@@ -449,12 +449,12 @@ record PolicyDocument(int version, List<Peer> peers, List<Rule> allowed) {
 
 **여기서 `PolicyView`를 참조하지 않는다.** 그 인터페이스는 Task 4에서 만들어지고 Task 5에서 붙인다 — 지금 참조하면 심볼이 없어 컴파일이 깨지고, 미리 만들면 Task 5의 RED가 사라진다. `allows`를 **public**으로 두는 것이 나중에 인터페이스를 붙일 때 시그니처가 그대로 맞는 조건이다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl contract -am test`
 Expected: `contract` 모듈 `Tests run: 13, Failures: 0`. (`-am` 때문에 `reconcile`의 1건도 함께 돌아 리액터 총합은 14이다.)
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add contract/src
@@ -473,7 +473,7 @@ git commit -m "feat: CommunicationPolicy 로딩 — 계약 오류는 즉시 실�
 - Create: `reconcile/src/main/java/dev/krillin/huginn/reconcile/Reconciler.java`
 - Test: `reconcile/src/test/java/dev/krillin/huginn/reconcile/ReconcilerTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 package dev.krillin.huginn.reconcile;
@@ -561,12 +561,12 @@ class ReconcilerTest {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl reconcile test`
 Expected: 컴파일 실패 — `PolicyView`·`Severity`·`Finding`·`ReconcileResult`·`Reconciler` 심볼 없음. 다른 이유로 깨지면 멈추고 원인을 본다
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 package dev.krillin.huginn.reconcile;
@@ -609,12 +609,12 @@ public record Finding(Severity severity, Kind kind, Observation evidence, String
 - 그 외 → `Finding` 하나. `Severity`는 `WRITE`·`CONTROL` → `HIGH`, `READ` → `MEDIUM`
 - `detail`은 사람이 읽는 한 문장으로 만든다. 규약: `"선언되지 않은 통신: <source> → <target> <protocol> <access>"`
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl reconcile test`
 Expected: `Tests run: 9, Failures: 0` (`EndpointTest` 1 + `ReconcilerTest` 8)
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add reconcile/src
@@ -631,7 +631,7 @@ git commit -m "feat: 대사기 — deny-by-default, UNDECIDABLE은 위반이 아
 
 이 청크의 중심 주장은 "`CommunicationPolicy`가 `PolicyView`를 구현한다"인데, 컴파일만 통과하면 두 타입이 실제로 함께 도는 경로는 청크 3까지 한 번도 실행되지 않는다. **여기서 닫는다.**
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 package dev.krillin.huginn.contract;
@@ -678,21 +678,21 @@ class PolicyReconcileIntegrationTest {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl contract -am test`
 Expected: 컴파일 실패 — `CommunicationPolicy`가 아직 `PolicyView`가 아님
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `CommunicationPolicy`에 `implements PolicyView`를 붙인다. 시그니처는 이미 맞으므로 다른 변경은 없다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn test`
 Expected: 전체 `BUILD SUCCESS`, `contract` 14건 + `reconcile` 9건. **`pcap`·`decode`·`cli` 세 모듈은 아직 테스트가 0건이며 그게 정상이다** — 소스가 없는 모듈의 빈 surefire 실행은 실패가 아니다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add contract/src
@@ -729,7 +729,7 @@ git commit -m "test: 정책 파일과 대사기가 함께 도는 경로를 청�
 - Create: `pcap/src/test/java/dev/krillin/huginn/pcap/PcapBuilder.java` *(테스트 소스)*
 - Test: `pcap/src/test/java/dev/krillin/huginn/pcap/PcapReaderTest.java`
 
-- [ ] **Step 1: 빌더 작성**
+- [x] **Step 1: 빌더 작성**
 
 libpcap 파일 포맷 — 글로벌 헤더 24바이트(magic, 버전 2.4, 타임존 0, sigfigs 0, snaplen, 링크타입), 이어서 패킷마다 16바이트 헤더(`ts_sec`, `ts_usec`, `incl_len`, `orig_len`) + 데이터.
 
@@ -794,7 +794,7 @@ public final class PcapBuilder {
 }
 ```
 
-- [ ] **Step 2: 실패하는 테스트 작성**
+- [x] **Step 2: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -895,12 +895,12 @@ void 타임스탬프의_부호비트가_서_있어도_미래_시각으로_읽는
 }
 ```
 
-- [ ] **Step 3: 실패 확인**
+- [x] **Step 3: 실패 확인**
 
 Run: `mvn -pl pcap test`
 Expected: 컴파일 실패
 
-- [ ] **Step 4: 구현**
+- [x] **Step 4: 구현**
 
 ```java
 public record CapturedPacket(Instant at, byte[] data, long originalLength) {
@@ -922,12 +922,12 @@ public record CapturedPacket(Instant at, byte[] data, long originalLength) {
 - 링크타입 1(Ethernet)만 허용.
 - `ts_sec`·`ts_usec`·`incl_len`·`orig_len`은 **모두** `& 0xFFFFFFFFL`로 unsigned 해석한다. `incl_len`이 잔여 바이트 수를 넘으면 `PcapException`.
 
-- [ ] **Step 5: 통과 확인**
+- [x] **Step 5: 통과 확인**
 
 Run: `mvn -pl pcap test`
 Expected: `Tests run: 13, Failures: 0`
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add pcap/src
@@ -947,7 +947,7 @@ git commit -m "feat: pcap 리더와 합성 빌더 — 포맷 변형을 원인과
 
 이름이 `LinkLayerDecoder`가 아닌 이유 — 링크 계층만이 아니라 네트워크(IPv4)와 전송(TCP)까지 벗겨낸다.
 
-- [ ] **Step 1: 빌더에 프레임 조립 헬퍼 추가**
+- [x] **Step 1: 빌더에 프레임 조립 헬퍼 추가**
 
 ```java
 /** TCP 플래그 비트. 데이터 세그먼트는 보통 ACK 만 서 있다. */
@@ -997,7 +997,7 @@ public static byte[] ethernetWithEthertype(int ethertype, byte[] body) { ... }
 
 구현 지침: IPv4 헤더의 `totalLength`는 **IP 헤더부터 페이로드 끝까지**의 실제 길이를 적는다(패딩 제외). IHL·dataOffset은 옵션 바이트 수에 맞춰 계산한다.
 
-- [ ] **Step 2: 실패하는 테스트 작성**
+- [x] **Step 2: 실패하는 테스트 작성**
 
 테스트 헬퍼 둘:
 - `private List<CapturedPacket> readAsPackets(byte[]... frames)` — 프레임들을 pcap 으로 감싸 `PcapReader.read`에 태운다.
@@ -1116,12 +1116,12 @@ void 대상_외_패킷_수를_보고한다() {
 }
 ```
 
-- [ ] **Step 3: 실패 확인**
+- [x] **Step 3: 실패 확인**
 
 Run: `mvn -pl pcap test`
 Expected: 컴파일 실패
 
-- [ ] **Step 4: 구현**
+- [x] **Step 4: 구현**
 
 ```java
 /**
@@ -1176,12 +1176,12 @@ public record DecodedFrames(List<TcpSegment> segments, int skipped) {}
 - 어떤 이유로든 대상이 아니면 `skipped`를 올린다(예외를 던지지 않는다)
 - **`segments`는 입력 패킷 순서를 유지한다** — Task 8의 최초 등장 순서 결정성이 이 전제 위에 선다
 
-- [ ] **Step 5: 통과 확인**
+- [x] **Step 5: 통과 확인**
 
 Run: `mvn -pl pcap test`
 Expected: `Tests run: 28, Failures: 0` (`PcapReaderTest` 13 + `FrameDecoderTest` 15)
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add pcap/src
@@ -1197,7 +1197,7 @@ git commit -m "feat: 프레임 디코드 — VLAN 대응, 페이로드 길이를
 - Create: `pcap/src/main/java/dev/krillin/huginn/pcap/TcpStreamAssembler.java`
 - Test: `pcap/src/test/java/dev/krillin/huginn/pcap/TcpStreamAssemblerTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 테스트 헬퍼 여섯. **고정 4-tuple 축약형만으로는 방향·절단·열거 순서·결정성 테스트 넷을 아예 쓸 수 없다** — 전체형과 목록 반환형이 함께 있어야 한다.
 
@@ -1335,12 +1335,12 @@ void 같은_입력에_같은_스트림_목록이_나온다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl pcap test`
 Expected: 컴파일 실패
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 /**
@@ -1372,12 +1372,12 @@ public record TcpStream(
 - seq 순으로 이어붙이되 **이미 채워진 오프셋은 덮어쓰지 않는다**(first-wins). **정렬은 stable해야 한다** — seq가 같고 내용이 다른 쌍에서 입력 순서가 이겨야 재전송 위장 방어가 결정적이 된다
 - 첫 갭에서 멈추고 그때까지를 `contiguousPrefix`로, `hasGap = true`로 둔다
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl pcap test`
 Expected: `Tests run: 42, Failures: 0` (13 + 15 + 14)
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add pcap/src
@@ -1424,7 +1424,7 @@ public final class ModbusFixtures {
 }
 ```
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -1474,12 +1474,12 @@ void 스트림_중간부터_시작해도_재동기화하지_않는다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: 컴파일 실패
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 /** @param pdu 함수코드를 **뺀** 나머지 데이터. 따라서 `pdu.length == length - 2` 다. */
@@ -1501,12 +1501,12 @@ public record FramingResult(List<ModbusFrame> frames, int undecodedBytes, boolea
 - 잔여가 `6 + length`보다 작으면(절단) 남은 바이트를 누적하고 종료
 - **포트를 인자로 받지 않는다** — 프레이밍만으로 판정한다
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: `decode` 모듈 `Tests run: 9, Failures: 0`
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -1521,7 +1521,7 @@ git commit -m "feat: MBAP 프레이밍 — 포트가 아니라 프레이밍으�
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/ModbusAccess.java`
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/ModbusAccessTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @ParameterizedTest @ValueSource(ints = {1, 2, 3, 4, 7, 11, 12, 17, 20, 24})
@@ -1556,23 +1556,23 @@ void 정의되지_않은_함수코드는_UNDECIDABLE이다(int fc) {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: 컴파일 실패
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `switch` 하드코딩 대신 상수 테이블(`Map<Integer, Access>`)로 둔다 — 함수코드 목록이 곧 문서가 되고, 2차 S7comm에서 같은 형태를 재사용한다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: `decode` 모듈 `Tests run: 33, Failures: 0` (프레이밍 9 + 매핑 24)
 
 > `@ParameterizedTest`는 **호출 하나가 테스트 하나**로 집계된다 — 10(READ) + 7(WRITE) + 1(진단) + 1(캡슐화) + 5(미정의) = 24.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -1591,7 +1591,7 @@ git commit -m "feat: Modbus 함수코드 → Access, 43은 MEI를 보지 않으�
 
 `pdu(...)`는 Task 9 의 `ModbusFixtures.pdu`를 쓴다 — 아래 테스트는 `import static dev.krillin.huginn.decode.ModbusFixtures.pdu;`로 한정 없이 부른다.
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -1627,21 +1627,21 @@ void PDU가_짧아_주소를_못_읽으면_함수코드만_적는다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: 컴파일 실패 — `ModbusObjectRef` 없음
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 객체 타입 매핑: FC 1·5·15 → `coil`(1번대), FC 2 → `discrete`(10001+), FC 4 → `input`(30001+), FC 3·6·16·22·23 → `holding`(40001+). 그 외는 `fc:<n>`.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: `decode` 모듈 `Tests run: 40, Failures: 0` (33 + `ModbusObjectRefTest` 7)
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -1670,7 +1670,7 @@ Modbus는 같은 함수코드라도 요청과 응답의 PDU 구조가 다르다.
 
 **HIGH를 만드는 것이 정확히 FC 15·16이고, 그 둘이 길이만으로 완전히 갈린다.** 오탐 경로를 정면으로 닫는 신호다.
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 // 함수코드를 짝으로 파라미터화한다. 표는 4≡3, 2≡1, 15≡16 을 주장하는데
@@ -1783,12 +1783,12 @@ void 아는_프레임이_하나라도_있고_충돌이_없으면_그_형태다()
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: 컴파일 실패 — `ModbusShape`·`ModbusShape.REQUEST_ONLY` 심볼 없음
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 /** 한 프레임 또는 한 방향이 요청인지 응답인지. 단정할 수 없으면 UNKNOWN 이다. */
@@ -1819,14 +1819,14 @@ public enum ModbusShape { REQUEST_ONLY, RESPONSE_ONLY, UNKNOWN }
 
 `ModbusShape.ofStream(List<ModbusFrame> frames)` — 각 프레임의 형태를 모아, **`REQUEST_ONLY`와 `RESPONSE_ONLY`가 섞여 있으면 `UNKNOWN`**, 한쪽만 있으면 그 형태, 전부 `UNKNOWN`이면 `UNKNOWN`.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: `decode` 모듈 `Tests run: 61, Failures: 0` (40 + `ModbusShapeTest` 21)
 
 > `@ParameterizedTest`는 호출 하나가 테스트 하나다 — 2 + 2 + 2 + 3 = 9 회에 단일 `@Test` 12건.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -1898,7 +1898,7 @@ rev 6이 뚫린 자리가 결정적이다. 이 문서가 **각각 참이라고 �
 
 셋의 합이 전체 대화 수다. **해독한 대화에서도 `UNDECIDABLE` 관찰은 나올 수 있다**(잔여 바이트·갭·절단·FC 43). 그것은 대화가 아니라 **관찰** 단위로 세며 리포트에서 별도 줄로 낸다 — 두 수를 한 칸에 담으면 FC 43만 잔뜩 든 캡처가 "전부 해독함"으로 보인다.
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 테스트 헬퍼 — `decode` 테스트 소스에 둔다. 청크 2의 `PcapBuilder`는 `pcap` 모듈 테스트 소스라 여기서 보이지 않으므로 `TcpStream`을 직접 만든다.
 
@@ -2144,12 +2144,12 @@ void 클라이언트_방향만_프레임을_못_뽑은_대화도_어딘가에_�
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: 컴파일 실패 — `ModbusObserver`·`ObservationResult` 심볼 없음
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 /**
@@ -2181,12 +2181,12 @@ public record ObservationResult(List<Observation> observations,
    - **하나 이상이면** `decodedConversations`를 올린다. 이어서 클라이언트 방향에 `undecodedBytes > 0`이거나 `hasGap`이거나 `truncated`면 `UNDECIDABLE` 관찰을 **한 건 더** 붙인다(`objectRef`는 `"-"`). **대화 계수는 더 건드리지 않는다** — 이 대화는 이미 '해독'이다
    - **0건이면** `UNDECIDABLE` 관찰 한 건을 만들고 `undecidableConversations`를 올린다. 이 관찰의 `source`/`target`/`at`은 **고른 클라이언트 방향 스트림**의 것을 쓴다(`objectRef`는 `"-"`). **이 갈래가 없으면 대화가 세 계수 어디에도 안 세인다** — 클라이언트 스트림이 프레임 중간에서 시작해 `isModbusStream == false`인데 서버 스트림은 정상인 대화가 그렇다. 3은 "어느 스트림에서도"라 안 걸리고, S2는 성립하며 지목한 방향도 캡처에 있어 4도 안 걸린다. `tcpdump -s 96`으로 폴링 중간부터 뜬 캡처에서 흔하다
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test`
 Expected: `decode` 모듈 `Tests run: 81, Failures: 0` (61 + `ModbusObserverTest` 20)
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -2270,7 +2270,7 @@ Huginn — 통신 대사 결과
            선언되지 않은 통신: 10.0.9.99:40000 → 10.0.2.11:502 MODBUS_TCP READ
 ```
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -2326,12 +2326,12 @@ void 위반이_있으면_종료코드_1이다() { /* UNDECIDABLE 이 많아도 �
 void 같은_입력에_같은_리포트가_나온다() { /* 문자열 동일 */ }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl cli -am test`
 Expected: 컴파일 실패
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 리포트의 천 단위 구분자는 `String.format(Locale.ROOT, "%,d", n)`로 낸다 — 기본 로케일에 맡기면 환경마다 문자열이 달라져 `같은_입력에_같은_리포트가_나온다`가 환경을 탄다.
 
@@ -2341,12 +2341,12 @@ Expected: 컴파일 실패
 
 `cli/pom.xml`에 shade 플러그인을 붙여 `huginn.jar` 하나로 실행되게 한다. `mainClass`는 `dev.krillin.huginn.cli.Huginn`이고, **`<finalName>huginn</finalName>`을 반드시 함께 준다** — 없으면 산출물이 `huginn-cli-0.1.0-SNAPSHOT.jar`가 되어 Task 15의 `java -jar cli/target/huginn.jar`가 바로 실패하고, 그 태스크가 닫으려던 §10 반증 시험이 또 안 돌아간다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn test`
 Expected: 전체 `BUILD SUCCESS`, `cli` 모듈 `Tests run: 10, Failures: 0`
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add cli/src cli/pom.xml
@@ -2370,7 +2370,7 @@ git commit -m "feat: 파이프라인과 CLI — 리포트는 커버리지를 함
 
 설계 §10의 첫 반증 조건은 *"공개 ICS 캡처에서 `UNDECIDABLE` 비율이 압도적이면 Modbus 단독으로 유의미한 판정이 된다는 전제가 틀린 것"*이다. **내려받기만 하고 실행하지 않으면 이 조건은 한 번도 시험되지 않는다.**
 
-- [ ] **Step 1: 내려받기 스크립트 작성**
+- [x] **Step 1: 내려받기 스크립트 작성**
 
 출처와 SHA-256을 스크립트에 명시한다(4SICS ICS Lab, Netresec 공개 캡처 등). 주 개발 환경이 Windows이므로 `.ps1`을 함께 둔다. 캡처는 **저장소에 넣지 않는다**(라이선스가 제각각).
 
@@ -2421,7 +2421,7 @@ git commit -m "test: 공개 ICS 캡처로 반증 조건을 시험한다"
 - Create: `LICENSE` — Bifrost에서 복사(Apache-2.0)
 - Test: `cli/src/test/java/dev/krillin/huginn/cli/ExamplePolicyTest.java`
 
-- [ ] **Step 1: LICENSE 복사**
+- [x] **Step 1: LICENSE 복사**
 
 ```bash
 test -f ../bifrost/LICENSE && cp ../bifrost/LICENSE LICENSE
@@ -2432,7 +2432,7 @@ test -f ../bifrost/LICENSE && cp ../bifrost/LICENSE LICENSE
 Run: `head -1 LICENSE`
 Expected: `                                 Apache License` (줄 수는 출처마다 201/202로 갈리므로 기준으로 쓰지 않는다)
 
-- [ ] **Step 2: 예시 정책 작성**
+- [x] **Step 2: 예시 정책 작성**
 
 `examples/policy.yaml` — 설계 §4의 예시를 그대로 두되 **로딩에 성공하는 형태**여야 한다(모든 `from`/`to`가 `peers`에 선언되어 있을 것).
 
@@ -2441,7 +2441,7 @@ Expected: `                                 Apache License` (줄 수는 출처�
 Run: `mvn -pl cli -am test`
 Expected: `cli` 모듈 `Tests run: 11, Failures: 0`. **`-am`이 빠지면** `cli`가 의존하는 네 형제 SNAPSHOT을 못 찾아 테스트가 아니라 의존성 해석에서 실패한다(어느 태스크도 `mvn install`을 하지 않는다).
 
-- [ ] **Step 3: README 작성**
+- [x] **Step 3: README 작성**
 
 Bifrost README의 톤을 따른다 — 무엇을 관찰하는지, **무엇을 하지 않는지**, 그리고 모든 주장에 대응하는 테스트가 무엇인지.
 
@@ -2452,7 +2452,7 @@ Bifrost README의 톤을 따른다 — 무엇을 관찰하는지, **무엇을 �
 Run: `grep -c "하지 않는" README.md && head -1 README.md`
 Expected: "하지 않는 것" 절이 존재하고, 첫 줄이 `# Huginn`
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add README.md LICENSE examples cli/src
@@ -2463,21 +2463,21 @@ git commit -m "docs: README와 예시 정책"
 
 ## 완료 조건
 
-- [ ] `mvn test` 전체 통과
-- [ ] **`decode` 밖 어디에도 MBAP·PDU·함수코드·PDU 형태를 다루는 코드가 없다** (`Protocol.MODBUS_TCP`라는 *이름*은 정책 계약이 쓰므로 `reconcile`·`contract`에 있는 것이 정상이다)
+- [x] `mvn test` 전체 통과
+- [x] **`decode` 밖 어디에도 MBAP·PDU·함수코드·PDU 형태를 다루는 코드가 없다** (`Protocol.MODBUS_TCP`라는 *이름*은 정책 계약이 쓰므로 `reconcile`·`contract`에 있는 것이 정상이다)
       Run: `grep -rn "MBAP\|functionCode\|unitId\|protocolId\|ModbusShape\|REQUEST_ONLY" --include=*.java pcap/src/main contract/src/main reconcile/src/main cli/src/main` → Expected: 히트 0건 (테스트 소스는 제외한다 — 주장은 main 코드에 대한 것이고, `cli` 테스트는 `ModbusFixtures`를 정당하게 쓴다)
-- [ ] `pcap`·`decode`·`reconcile` 모듈에 런타임 서드파티 의존이 없다
+- [x] `pcap`·`decode`·`reconcile` 모듈에 런타임 서드파티 의존이 없다
       Run: `mvn -pl pcap,decode,reconcile dependency:tree` → Expected: `compile`/`runtime` 스코프에 `com.fasterxml.*`가 없다
-- [ ] **같은 pcap·정책을 두 번 돌리면 같은 리포트 문자열이 나온다** (Task 14 `같은_입력에_같은_리포트가_나온다`) — 결정성은 설계 §8의 시험 전략이자 스트림 열거·대화 순회 규칙의 존재 이유다
-- [ ] 리포트가 커버리지 여섯 수치(처리 패킷·대상 외 패킷·해독한 대화·대상 외 대화·`UNDECIDABLE` 대화·`UNDECIDABLE` 관찰)를 항상 낸다
-- [ ] **대화 계수 셋의 합이 전체 대화 수와 같다** — 어느 대화도 어느 칸에도 안 세이거나 두 번 세이지 않는다
-- [ ] 위반이 든 합성 캡처에서 실제로 잡힌다 — 정상 캡처에서 0건인 것만으로는 증명되지 않는다
-- [ ] **요청과 응답이 모두 든 정상 캡처에서 위반이 0건이다** — 요청/응답 결함의 회귀 가드
-- [ ] **한 방향만 잡힌 캡처가 위반이 아니라 `UNDECIDABLE`로 나온다** — 클라이언트 판정의 회귀 가드
-- [ ] **서버 포트가 클라이언트 포트보다 크거나, 클라이언트가 특권 포트를 바인딩한 양방향 캡처에서 방향이 올바로 판정된다** — PDU 형태(S2)가 포트를 보지 않고 갈라 준다. 위 단방향 가드로는 잡히지 않는다(둘 다 양방향이다)
-- [ ] **방향 판정에 포트를 쓰는 코드가 없다** — 세 번 시도해 세 번 거울상에 뚫렸다. `sourcePort`·`targetPort`는 `Observation`을 만들 때 기록용으로만 쓴다
-- [ ] **SYN과 PDU 형태가 어긋나면 위반이 아니라 `UNDECIDABLE`이다** — 조립기가 연결 경계를 모르므로 불일치는 "한 4-tuple에 연결이 둘"이라는 신호다
-- [ ] **양쪽 방향이 같은 형태로 나오는 대화는 `UNDECIDABLE`이다** — 다수결로 밀어붙이지 않는다
-- [ ] **SYN+ACK를 SYN으로 읽지 않는다** — 그러면 서버가 클라이언트로 판정되어 같은 오탐이 다른 경로로 되살아난다
-- [ ] `java -jar cli/target/huginn.jar <capture> <policy>`가 실제로 실행되고 종료 코드가 0/1/2 계약을 지킨다
+- [x] **같은 pcap·정책을 두 번 돌리면 같은 리포트 문자열이 나온다** (Task 14 `같은_입력에_같은_리포트가_나온다`) — 결정성은 설계 §8의 시험 전략이자 스트림 열거·대화 순회 규칙의 존재 이유다
+- [x] 리포트가 커버리지 여섯 수치(처리 패킷·대상 외 패킷·해독한 대화·대상 외 대화·`UNDECIDABLE` 대화·`UNDECIDABLE` 관찰)를 항상 낸다
+- [x] **대화 계수 셋의 합이 전체 대화 수와 같다** — 어느 대화도 어느 칸에도 안 세이거나 두 번 세이지 않는다
+- [x] 위반이 든 합성 캡처에서 실제로 잡힌다 — 정상 캡처에서 0건인 것만으로는 증명되지 않는다
+- [x] **요청과 응답이 모두 든 정상 캡처에서 위반이 0건이다** — 요청/응답 결함의 회귀 가드
+- [x] **한 방향만 잡힌 캡처가 위반이 아니라 `UNDECIDABLE`로 나온다** — 클라이언트 판정의 회귀 가드
+- [x] **서버 포트가 클라이언트 포트보다 크거나, 클라이언트가 특권 포트를 바인딩한 양방향 캡처에서 방향이 올바로 판정된다** — PDU 형태(S2)가 포트를 보지 않고 갈라 준다. 위 단방향 가드로는 잡히지 않는다(둘 다 양방향이다)
+- [x] **방향 판정에 포트를 쓰는 코드가 없다** — 세 번 시도해 세 번 거울상에 뚫렸다. `sourcePort`·`targetPort`는 `Observation`을 만들 때 기록용으로만 쓴다
+- [x] **SYN과 PDU 형태가 어긋나면 위반이 아니라 `UNDECIDABLE`이다** — 조립기가 연결 경계를 모르므로 불일치는 "한 4-tuple에 연결이 둘"이라는 신호다
+- [x] **양쪽 방향이 같은 형태로 나오는 대화는 `UNDECIDABLE`이다** — 다수결로 밀어붙이지 않는다
+- [x] **SYN+ACK를 SYN으로 읽지 않는다** — 그러면 서버가 클라이언트로 판정되어 같은 오탐이 다른 경로로 되살아난다
+- [x] `java -jar cli/target/huginn.jar <capture> <policy>`가 실제로 실행되고 종료 코드가 0/1/2 계약을 지킨다
 - [ ] 공개 ICS 캡처로 설계 §10의 반증 조건을 실제로 시험하고 결과를 기록했다
