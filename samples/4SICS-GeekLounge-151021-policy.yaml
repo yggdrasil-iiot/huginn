@@ -1,0 +1,5 @@
+version: 1
+
+# 이 캡처의 Modbus 관찰은 전부 UNDECIDABLE 이라 선언해도 판정에 쓰이지 않는다.
+peers: []
+allowed: []
