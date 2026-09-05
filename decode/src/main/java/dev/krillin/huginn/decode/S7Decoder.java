@@ -31,6 +31,11 @@ final class S7Decoder implements ProtocolDecoder {
     private static final int ROSCTR_JOB = 1;
     private static final int ROSCTR_USERDATA = 7;
 
+    /** 임시 — Task 5 에서 RunReader 로 대체된다. 지금은 첫 구간만 읽어 동작을 보존한다. */
+    private static byte[] firstRun(TcpStream stream) {
+        return stream.runs().isEmpty() ? new byte[0] : stream.runs().get(0);
+    }
+
     @Override
     public Protocol protocol() {
         return Protocol.S7COMM;
@@ -38,7 +43,7 @@ final class S7Decoder implements ProtocolDecoder {
 
     @Override
     public StreamEvidence scan(TcpStream stream) {
-        S7FramingResult framing = S7Framer.frames(stream.contiguousPrefix());
+        S7FramingResult framing = S7Framer.frames(firstRun(stream));
         return new StreamEvidence(stream, framing.frames().size(), framing.undecodedBytes() > 0);
     }
 
@@ -48,7 +53,7 @@ final class S7Decoder implements ProtocolDecoder {
         boolean unread = false;                        // Userdata 또는 COTP 분할
 
         for (StreamEvidence evidence : conversation) {
-            S7FramingResult framing = S7Framer.frames(evidence.stream().contiguousPrefix());
+            S7FramingResult framing = S7Framer.frames(firstRun(evidence.stream()));
             unread |= framing.fragmented();
             boolean hasJob = false;
             for (S7Frame frame : framing.frames()) {
@@ -70,7 +75,7 @@ final class S7Decoder implements ProtocolDecoder {
 
         StreamEvidence client = requestSides.get(0);
         List<Observation> observations = new ArrayList<>();
-        for (S7Frame frame : S7Framer.frames(client.stream().contiguousPrefix()).frames()) {
+        for (S7Frame frame : S7Framer.frames(firstRun(client.stream())).frames()) {
             if (frame.rosctr() == ROSCTR_JOB) {
                 observations.add(observationOf(client.stream(), frame));
             }

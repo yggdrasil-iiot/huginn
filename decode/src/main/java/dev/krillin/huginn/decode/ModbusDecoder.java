@@ -33,6 +33,11 @@ import java.util.List;
  */
 final class ModbusDecoder implements ProtocolDecoder {
 
+    /** 임시 — Task 5 에서 RunReader 로 대체된다. 지금은 첫 구간만 읽어 동작을 보존한다. */
+    private static byte[] firstRun(TcpStream stream) {
+        return stream.runs().isEmpty() ? new byte[0] : stream.runs().get(0);
+    }
+
     @Override
     public Protocol protocol() {
         return Protocol.MODBUS_TCP;
@@ -40,7 +45,7 @@ final class ModbusDecoder implements ProtocolDecoder {
 
     @Override
     public StreamEvidence scan(TcpStream stream) {
-        FramingResult framing = ModbusFramer.frames(stream.contiguousPrefix());
+        FramingResult framing = ModbusFramer.frames(firstRun(stream));
         return new StreamEvidence(stream, framing.frames().size(), framing.undecodedBytes() > 0);
     }
 
@@ -65,7 +70,7 @@ final class ModbusDecoder implements ProtocolDecoder {
         }
 
         List<Observation> observations = new ArrayList<>();
-        for (ModbusFrame frame : ModbusFramer.frames(client.stream().contiguousPrefix()).frames()) {
+        for (ModbusFrame frame : ModbusFramer.frames(firstRun(client.stream())).frames()) {
             observations.add(observationOf(client.stream(), frame));
         }
         return new Decoded(observations, client, false, false);
@@ -103,7 +108,7 @@ final class ModbusDecoder implements ProtocolDecoder {
         int responseCount = 0;
 
         for (StreamEvidence evidence : conversation) {
-            List<ModbusFrame> frames = ModbusFramer.frames(evidence.stream().contiguousPrefix()).frames();
+            List<ModbusFrame> frames = ModbusFramer.frames(firstRun(evidence.stream())).frames();
             switch (ModbusShape.ofStream(frames)) {
                 case REQUEST_ONLY -> {
                     requestCount++;

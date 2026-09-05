@@ -21,7 +21,11 @@ class ModbusObserverTest {
     /** 전체형. 청크 2 의 PcapBuilder 는 pcap 모듈 테스트 소스라 여기서 보이지 않으므로 직접 만든다. */
     private static TcpStream stream(String src, int sport, String dst, int dport, byte[] bytes,
                                     Instant at, boolean sawSynOnly, boolean hasGap, boolean truncated) {
-        return new TcpStream(at, src, sport, dst, dport, bytes, hasGap, truncated, sawSynOnly);
+        // hasGap 을 구간 목록으로 번역한다 — 호출부 8곳을 건드리지 않기 위해 파라미터는 유지한다.
+        // 둘째 구간은 프레임이 되지 않는 바이트라 갭 이후 읽기가 켜져도 거부된다.
+        List<byte[]> runs = bytes.length == 0 ? List.of()
+            : hasGap ? List.of(bytes, "쓰레기".getBytes(StandardCharsets.UTF_8)) : List.of(bytes);
+        return new TcpStream(at, src, sport, dst, dport, runs, hasGap ? 100 : 0, truncated, sawSynOnly);
     }
 
     /** 흔한 경우의 축약 — at 은 EPOCH, 플래그는 전부 false. */

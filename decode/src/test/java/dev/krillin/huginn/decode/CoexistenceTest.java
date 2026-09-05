@@ -19,7 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class CoexistenceTest {
 
     private static TcpStream stream(String src, int sport, String dst, int dport, byte[] bytes) {
-        return new TcpStream(Instant.EPOCH, src, sport, dst, dport, bytes, false, false, false);
+        return new TcpStream(Instant.EPOCH, src, sport, dst, dport,
+            bytes.length == 0 ? List.of() : List.of(bytes), 0, false, false);
     }
 
     private final TcpStream modbusStream = stream("10.0.1.20", 40000, "10.0.2.11", 502,
