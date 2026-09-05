@@ -6,15 +6,21 @@ Set-Location (Join-Path $PSScriptRoot '..')
 $samples = 'samples'
 New-Item -ItemType Directory -Force -Path $samples | Out-Null
 
-# 출처 — 4SICS ICS Lab (Netresec 배포): https://www.netresec.com/?page=PCAP4SICS
+# 출처 — 4SICS ICS Lab, Netresec 배포: https://www.netresec.com/?page=PCAP4SICS
+# 재배포·교육 사용 시 CS3Sthlm 명시가 배포처의 요청이다. 링크는 2026-09-05 확인분.
 $sources = @(
-    'https://www.netresec.com/files/4SICS-GeekLounge-151020.pcap',
-    'https://www.netresec.com/files/4SICS-GeekLounge-151021.pcap',
-    'https://www.netresec.com/files/4SICS-GeekLounge-151022.pcap'
+    'https://share.netresec.com/s/xYj2qCNbsLEAd6M/download/4SICS-GeekLounge-151020.pcap',   # 25MB
+    'https://share.netresec.com/s/camL59aoxbCRyyZ/download/4SICS-GeekLounge-151021.pcap',   # 134MB
+    'https://share.netresec.com/s/gw6Y2QzJHqDD5pr/download/4SICS-GeekLounge-151022.pcap'    # 200MB
 )
 
 # editcap 이 없으면 멈춘다 — 조용히 건너뛰면 캡처가 없는데도 성공한 것처럼 보인다.
+# 윈도 설치본은 PATH 에 들어가지 않는 경우가 흔하다 — 기본 설치 경로를 먼저 본다.
 $editcap = Get-Command editcap -ErrorAction SilentlyContinue
+if (-not $editcap -and (Test-Path 'C:\Program Files\Wireshark\editcap.exe')) {
+    $env:PATH = 'C:\Program Files\Wireshark;' + $env:PATH
+    $editcap = Get-Command editcap -ErrorAction SilentlyContinue
+}
 if (-not $editcap) {
     Write-Error @'
 editcap 이 PATH 에 없다. Wireshark 를 설치하고 다시 실행한다.

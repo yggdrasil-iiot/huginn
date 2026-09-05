@@ -1,0 +1,34 @@
+# 4SICS-GeekLounge-151022.pcap 용 통신 정책.
+#
+# 캡처에서 관찰된 통신 중 **일부만** 선언한다 — 전부 선언하면 위반이 0건이라 대사가
+# 실제로 도는지 알 수 없다. 여기서는 4SICS 랩의 폴러(192.168.2.166)가 PLC 세 대를
+# **읽는 것만** 선언했다. 실제로는 같은 폴러가 쓰기도 하고, 다른 두 호스트도 붙는다.
+#
+# 이 파일은 시나리오이지 4SICS 랩의 실제 승인 목록이 아니다 — 그런 목록은 공개돼 있지 않다.
+version: 1
+
+peers:
+  - id: poller
+    address: 192.168.2.166
+  - id: plc-60
+    address: 192.168.88.60
+  - id: plc-61
+    address: 192.168.88.61
+  - id: plc-95
+    address: 192.168.88.95
+
+allowed:
+  - from: poller
+    to: plc-60
+    protocol: MODBUS_TCP
+    access: [READ]
+
+  - from: poller
+    to: plc-61
+    protocol: MODBUS_TCP
+    access: [READ]
+
+  - from: poller
+    to: plc-95
+    protocol: MODBUS_TCP
+    access: [READ]

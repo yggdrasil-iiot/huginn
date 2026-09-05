@@ -9,17 +9,24 @@ cd "$(dirname "$0")/.."
 SAMPLES="samples"
 mkdir -p "$SAMPLES"
 
-# 출처. URL 은 배포처가 바꿀 수 있으므로 실패하면 조용히 넘기지 않고 멈춘다.
-#   4SICS ICS Lab (Netresec 배포) — https://www.netresec.com/?page=PCAP4SICS
+# 출처 — 4SICS ICS Lab, Netresec 배포: https://www.netresec.com/?page=PCAP4SICS
+# 재배포하거나 교육에 쓸 때는 CS3Sthlm 을 명시해 달라는 것이 배포처의 요청이다.
+# 아래 링크는 2026-09-05 에 배포 페이지에서 확인한 것이다. 배포처가 바꿀 수 있으므로
+# 실패하면 조용히 넘기지 않고 멈춘다 — 그래야 캡처 없이 성공한 것처럼 보이지 않는다.
 SOURCES=(
-  "https://www.netresec.com/files/4SICS-GeekLounge-151020.pcap"
-  "https://www.netresec.com/files/4SICS-GeekLounge-151021.pcap"
-  "https://www.netresec.com/files/4SICS-GeekLounge-151022.pcap"
+  "https://share.netresec.com/s/xYj2qCNbsLEAd6M/download/4SICS-GeekLounge-151020.pcap"   # 25MB
+  "https://share.netresec.com/s/camL59aoxbCRyyZ/download/4SICS-GeekLounge-151021.pcap"   # 134MB
+  "https://share.netresec.com/s/gw6Y2QzJHqDD5pr/download/4SICS-GeekLounge-151022.pcap"   # 200MB
 )
 
 # editcap 은 이 프로젝트의 유일한 외부 도구다. PcapReader 는 pcapng 를 거부하므로
 # 받은 파일이 pcapng 이면 pcap 으로 정규화해야 한다. 없으면 조용히 건너뛰지 않고 멈춘다 —
 # 건너뛰면 캡처가 없는데도 성공한 것처럼 보인다.
+# 윈도 설치본은 PATH 에 들어가지 않는 경우가 흔하다 — 기본 설치 경로를 먼저 본다.
+if ! command -v editcap >/dev/null 2>&1 && [ -x "/c/Program Files/Wireshark/editcap.exe" ]; then
+  PATH="/c/Program Files/Wireshark:$PATH"
+fi
+
 if ! command -v editcap >/dev/null 2>&1; then
   echo "editcap 이 PATH 에 없다. Wireshark 를 설치하고 다시 실행한다." >&2
   echo "  Windows: winget install WiresharkFoundation.Wireshark" >&2

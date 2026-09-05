@@ -1,0 +1,5 @@
+version: 1
+
+# 이 캡처에는 Modbus 대화가 없다(전량 S7comm·비산업 트래픽). 선언할 것이 없다.
+peers: []
+allowed: []

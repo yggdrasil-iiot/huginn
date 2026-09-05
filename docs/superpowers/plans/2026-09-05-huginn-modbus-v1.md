@@ -2390,21 +2390,21 @@ git commit -m "feat: 파이프라인과 CLI — 리포트는 커버리지를 함
 Run: `bash scripts/fetch-samples.sh` (또는 `pwsh scripts/fetch-samples.ps1`)
 Expected: `samples/` 아래에 `.pcap` 파일들이 생기고 해시 검증이 전부 통과
 
-- [ ] **Step 2: 실행하고 결과를 기록**
+- [x] **Step 2: 실행하고 결과를 기록**
 
 내려받은 각 캡처에 Huginn을 돌려 커버리지 여섯 수치를 `samples/README.md`에 표로 기록한다. 정책 파일은 캡처에서 관찰된 통신 중 일부만 선언해 위반이 나오는 형태로 만든다.
 
 Run: `mvn -DskipTests package && java -jar cli/target/huginn.jar samples/<capture>.pcap samples/<capture>-policy.yaml`
 Expected: 리포트가 출력되고 종료 코드가 0 또는 1(2가 나오면 입력·계약 문제이므로 먼저 해결한다)
 
-- [ ] **Step 3: 반증 조건 판정**
+- [x] **Step 3: 반증 조건 판정**
 
 `UNDECIDABLE` 비율이 높으면 원인을 적는다 — 프로토콜 선택이 틀렸는가, 요청/응답 판정이 R1·R2·R4(형태 모순·신호 불일치·둘 다 침묵)나 R5(단방향 캡처)로 빠졌는가, 캡처가 대화 중간부터 시작하는가. **판정 결과를 설계 문서 §10에 반영한다.**
 
 Run: `git diff --stat docs/superpowers/specs/2026-09-05-huginn-design.md`
 Expected: §10이 실제로 갱신되어 diff 에 나타나고, `samples/README.md`에 캡처별 여섯 수치와 판정 한 줄이 기록되어 있다
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add scripts samples docs/superpowers/specs
@@ -2480,4 +2480,4 @@ git commit -m "docs: README와 예시 정책"
 - [x] **양쪽 방향이 같은 형태로 나오는 대화는 `UNDECIDABLE`이다** — 다수결로 밀어붙이지 않는다
 - [x] **SYN+ACK를 SYN으로 읽지 않는다** — 그러면 서버가 클라이언트로 판정되어 같은 오탐이 다른 경로로 되살아난다
 - [x] `java -jar cli/target/huginn.jar <capture> <policy>`가 실제로 실행되고 종료 코드가 0/1/2 계약을 지킨다
-- [ ] 공개 ICS 캡처로 설계 §10의 반증 조건을 실제로 시험하고 결과를 기록했다
+- [x] 공개 ICS 캡처로 설계 §10의 반증 조건을 실제로 시험하고 결과를 기록했다
