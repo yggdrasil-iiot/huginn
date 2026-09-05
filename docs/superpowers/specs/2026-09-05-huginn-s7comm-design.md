@@ -1,6 +1,6 @@
 # Huginn 2차 — S7comm 해독
 
-- 상태: 초안 rev2 (2026-09-05) — 1차 리뷰 반영, 이음매 정의와 합격선을 전면 개정
+- 상태: 초안 rev3 (2026-09-05) — 2차 리뷰 반영. 대화 단위 충돌·ROSCTR 7 구현가능성·기대값 재검증
 - 선행: [1차 설계](2026-09-05-huginn-design.md) · 저장소 `yggdrasil-iiot/huginn` · Java 17 · Apache-2.0
 
 ---
@@ -40,7 +40,7 @@
 | 제외 | 이유 |
 |---|---|
 | **S7comm-plus** (S7-1200/1500 네이티브) | 4SICS 세 캡처에 **0 프레임**. 프레임 구조가 완전히 다르고 문서화도 빈약한데 검증할 데이터가 없다 |
-| **Userdata(ROSCTR 7) 서브함수 해석** | 요청/응답 구분이 파라미터 안쪽에 또 있고 서브함수마다 구조가 다르다. 4SICS 표본은 16건뿐(§8 표). 해석하지 않는다 — 처리 규칙은 §5 |
+| **Userdata(ROSCTR 7) 서브함수 해석** | 요청/응답 구분이 파라미터 안쪽에 또 있고 서브함수마다 구조가 다르다. **4SICS 전체에 4건**(전부 151021)이라 검증할 표본도 없다. 해석하지 않는다 — 처리 규칙은 §5 |
 | **`0x28` PLC Control의 서브서비스 해석** | 실제 동작은 가변길이 서비스 문자열(`P_PROGRAM`·`_INSE`·`_DELE` 등)에 있다. 1차가 FC 8(Diagnostics)을 서브함수 해석 없이 통째로 CONTROL로 올린 것과 같은 보수적 판단이며, 같은 이유로 **과대분류인 면이 있다는 것을 인정한다** |
 | **COTP 분할 재조립** | EOT=0 조각을 잇는 것은 TCP 재조립을 한 층 더 쌓는 일이다. 1차가 재동기화를 거부한 것과 같은 판단으로, 분할이 보이면 그 지점부터 `UNDECIDABLE`이다 |
 | **프로토콜별 커버리지 분리** | 리포트가 프로토콜별로 수치를 나누면 `Report`·`ObservationResult`가 바뀌어 이음매 시험이 흐려진다. **합산을 유지**하고 분리는 판정 후 별도 작업 |
@@ -61,15 +61,19 @@
 
 ### 패키지는 평평하게 둔다
 
-`modbus/`·`s7/` 하위 패키지로 나누지 **않는다.** `ModbusFixtures`가 `dev.krillin.huginn.decode`에 있고 `cli`의 `EndToEndTest`가 그 이름으로 import하므로, 옮기는 순간 §8의 "테스트를 한 줄도 고치지 않는다"가 깨진다. 파일 15개 남짓이라 평평해도 읽힌다.
+`modbus/`·`s7/` 하위 패키지로 나누지 **않는다.** `ModbusFixtures`가 `dev.krillin.huginn.decode`에 있고 `cli`의 `EndToEndTest`가 그 이름으로 import하므로, 옮기는 순간 §8의 "테스트를 한 줄도 고치지 않는다"가 깨진다.
 
 ```
-decode/  TrafficObserver      대화 순회와 계수 — 프로토콜을 모른다. cli 의 진입점
-         ProtocolDecoder      이음매. 프로토콜 지식은 전부 이 뒤에 있다
-         ModbusObserver       Modbus 전용 진입점(아래 참조)
-         Modbus*              1차 코드 — 패키지 이동 없음
-         S7Framer·S7Access·S7ObjectRef·S7Decoder
+decode/  TrafficObserver                 대화 순회와 계수 — 프로토콜을 모른다. cli 의 진입점
+         ProtocolDecoder·StreamEvidence·Decoded   이음매. 프로토콜 지식은 전부 이 뒤에 있다
+         ModbusDecoder                   ProtocolDecoder 구현. 1차 판정 로직을 그대로 감싼다
+         ModbusObserver                  Modbus 전용 진입점(아래 참조)
+         ModbusFramer·ModbusShape·ModbusAccess·ModbusObjectRef·ModbusFrame·FramingResult
+         S7Decoder·S7Framer·S7Access·S7ObjectRef·S7Frame
+         ObservationResult
 ```
+
+main 소스가 9개에서 20개 안팎으로 는다. 그래도 평평하게 두는 이유는 위와 같다.
 
 **`ModbusObserver.observe(List<TcpStream>)`는 공개 진입점으로 남는다.** `ModbusObserverTest` 20건이 이것을 부르고, 그 파일은 고치지 않기로 했다. 의미도 못박는다 — **Modbus 해독기 하나만** 등록해 순회기를 돌린다(`TrafficObserver.observe(streams, List.of(new ModbusDecoder()))`). 그 테스트가 증명하려는 것은 Modbus 판정이지 다중 프로토콜 공존이 아니다. 공존은 §8의 새 테스트가 따로 증명한다.
 
@@ -97,8 +101,12 @@ record StreamEvidence(TcpStream stream, int frameCount, boolean leftoverBytes) {
 /**
  * @param requestObservations 요청 프레임에서 만든 관찰. 응답은 들어가지 않는다(1차 §5-⑤)
  * @param client              요청을 보낸 방향의 **StreamEvidence**. null 이면 판정 불가다
+ * @param tailUndecidable     프레임은 뽑았으나 해석하지 않은 것이 대화 어딘가에 있는가.
+ *                            S7 이 Userdata(ROSCTR 7)를 만났을 때 세운다 — 그 프레임은 **응답
+ *                            방향에도 실리므로** client 의 잔여만 보는 규칙으로는 잡히지 않는다.
+ *                            Modbus 는 항상 false 다: 그쪽 잔여·갭·절단은 client 증거로 이미 흐른다
  */
-record Decoded(List<Observation> requestObservations, StreamEvidence client) { }
+record Decoded(List<Observation> requestObservations, StreamEvidence client, boolean tailUndecidable) { }
 ```
 
 `Decoded`가 `TcpStream`이 아니라 `StreamEvidence`를 돌려주는 것이 중요하다. `TcpStream`은 `byte[] contiguousPrefix`를 컴포넌트로 가진 record라 **`equals`가 배열 참조 비교**다. 순회기가 클라이언트 스트림을 증거 목록에 되짚으려 하면 동일 인스턴스가 흐를 때만 우연히 동작한다. 증거를 그대로 돌려받으면 되짚을 일이 없다.
@@ -107,7 +115,20 @@ record Decoded(List<Observation> requestObservations, StreamEvidence client) { }
 
 ### 해독기 등록과 선택
 
-해독기 목록은 **`decode` 안에 고정 순서로** 둔다(`ModbusDecoder`, `S7Decoder`). `cli`가 목록을 알면 진입점 변경이 한 줄로 끝나지 않는다.
+해독기 목록은 **`decode` 안에 고정 순서로** 둔다:
+
+```java
+final class TrafficObserver {
+    private static final List<ProtocolDecoder> DECODERS =
+        List.of(new ModbusDecoder(), new S7Decoder());
+
+    static ObservationResult observe(List<TcpStream> streams) { return observe(streams, DECODERS); }
+    static ObservationResult observe(List<TcpStream> streams, List<ProtocolDecoder> decoders) { ... }
+}
+```
+
+`cli`는 인자 없는 판만 부른다 — 목록을 알면 진입점 변경이 한 줄로 끝나지 않는다. 인자 있는 판은
+`ModbusObserver`와 테스트가 쓴다.
 
 대화 하나를 처리하는 순서:
 
@@ -115,9 +136,9 @@ record Decoded(List<Observation> requestObservations, StreamEvidence client) { }
 2. **프레임을 주장한 해독기가 없으면** → 대상 외. 절단·갭과 무관하게 여기서 끝낸다(1차 우선순위 규칙 그대로)
 3. **주장한 해독기 중 등록 순서상 첫 번째**가 그 대화를 처리한다
 4. 이후는 프로토콜과 무관한 1차 종결 규칙 그대로다:
-   - `client == null`(판정 불가) → `UNDECIDABLE` 관찰 1건, `undecidableConversations`++. 이 관찰의 `at`·`source`·`target`은 **증거 목록의 첫 원소**(= 대화에 처음 등장한 스트림)에서 온다
+   - `client == null`(판정 불가) → `UNDECIDABLE` 관찰 1건, `undecidableConversations`++. 이 관찰의 `at`·`source`·`target`은 **증거 목록의 첫 원소**(= 대화에 처음 등장한 스트림)에서 오고, `protocol`은 **이긴 해독기의 `protocol()`** 이다(순회기가 프로토콜을 지어낼 자리는 없다)
    - `requestObservations`가 비었으면 → `UNDECIDABLE` 관찰 1건(`client` 기준), `undecidableConversations`++
-   - 관찰이 1건 이상 → `decodedConversations`++, 그리고 `client`에 잔여·갭·절단이 있으면 `UNDECIDABLE` 관찰을 **하나 더** 붙인다(대화 계수는 건드리지 않는다)
+   - 관찰이 1건 이상 → `decodedConversations`++, 그리고 **`client`에 잔여·갭·절단이 있거나 `Decoded.tailUndecidable`이 참이면** `UNDECIDABLE` 관찰을 **하나 더** 붙인다(대화 계수는 건드리지 않는다)
 
 순회가 한 번뿐이고 모든 분기가 정확히 하나의 계수를 올리므로 **"세 계수의 합 = 전체 대화 수"가 구조적으로 유지된다.**
 
@@ -131,7 +152,11 @@ record Decoded(List<Observation> requestObservations, StreamEvidence client) { }
 
 **둘째, 그 분기는 만들 수 없는 관찰을 요구한다.** `Observation.protocol`은 필수인데 충돌한 대화는 어느 프로토콜도 아니다. `Protocol.UNKNOWN`을 추가하면 `reconcile`이 한 번 더 바뀌어, 이음매와 무관한 이유로 §7이 실패한다.
 
-그래서 규칙은 **등록 순서상 첫 번째가 이긴다**로 두고, 불가능성을 §8의 테스트로 고정한다 — 어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다는 것을 실제로 확인한다. 세 번째 프로토콜을 붙일 때 이 전제가 무너지면 그때 다시 판단한다.
+**다만 위 증명은 스트림 단위다.** 한 대화는 방향이 둘이므로, 한쪽이 Modbus로 다른 쪽이 S7으로 걸리는 배치를 증명이 배제하지 못한다(임시 포트 재사용으로 서로 다른 두 연결이 한 4-tuple에 묶이는 경우 — 1차가 이미 겪은 그 문제다). 그때 등록 순서로 Modbus가 이기면 **반대 방향의 S7 Job 은 조용히 버려진다.**
+
+그래서 규칙은 **등록 순서상 첫 번째가 이긴다**로 두되, **한 대화에서 둘 이상이 주장한 횟수를 순회기가 세어 둔다.** 이 수는 리포트에 내지 않는다(§6의 합산 유지) — A단계 검증에서 **4SICS 세 캡처 모두 0인지 확인해 기록한다.** 0이 아니면 조용한 오판이 실제로 일어나고 있다는 뜻이고, §8의 관찰 수 차이를 설명하는 네 번째 원인이 된다.
+
+스트림 단위 불가능성은 §8의 테스트로 고정한다. 세 번째 프로토콜을 붙일 때 이 전제가 무너지면 그때 다시 판단한다.
 
 ---
 
@@ -172,16 +197,16 @@ S7     32 <rosctr:1> <redundancy:2> <pdu-ref:2> <param-len:2> <data-len:2>
 | 2 (Ack) · 3 (Ack_Data) | 응답 | 관찰하지 않는다 (1차 §5-⑤) |
 | 7 (Userdata) | 요청·응답 양쪽 | **프레임으로는 세되 관찰하지 않는다** — 아래 |
 
-**ROSCTR 7 규칙 (한 곳에서만 정의한다).** Userdata 프레임은 유효 S7 프레임이므로 `frameCount`에 들어간다(그 스트림은 S7이지 대상 외가 아니다). 그러나 요청/응답을 가르지 않았으므로 관찰을 만들지 않고, **`leftoverBytes`와 똑같이 취급해 그 대화에 `UNDECIDABLE` 관찰을 하나 붙인다.** 결과적으로:
+**기본 규칙부터 쓴다 (예외만 적어두면 구현자가 추론해야 한다).** 한 대화에서 **Job 프레임을 실은 방향이 클라이언트**다. 그런 방향이 **0개거나 2개면 `client = null`**(판정 불가)이다. 0개인 경우가 응답만 잡힌 캡처와 Userdata만 실린 대화이고, 2개인 경우가 한 4-tuple에 연결이 둘 묶인 경우다 — 1차 S2의 "양쪽이 같은 형태면 모순"과 같은 판단이며, 그 대화의 Job은 **하나도 관찰되지 않는다**(§8의 계수 주의사항).
 
-- Userdata만 실린 대화 → 관찰 0건 → **`UNDECIDABLE` 대화** 1개, 관찰 1건
-- Job과 Userdata가 섞인 대화 → **해독한 대화**, 관찰은 Job 개수 + 꼬리 `UNDECIDABLE` **1건**(Userdata 프레임 수와 무관하게 한 건)
+**ROSCTR 7 규칙 (한 곳에서만 정의한다).** Userdata 프레임은 유효 S7 프레임이므로 `frameCount`에 들어간다(그 스트림은 S7이지 대상 외가 아니다). 그러나 요청/응답을 가르지 않았으므로 관찰을 만들지 않고, **해독기가 `Decoded.tailUndecidable`을 세워** 그 대화에 `UNDECIDABLE` 관찰을 하나 붙인다. `StreamEvidence.leftoverBytes`로 신호하지 않는 이유는 두 가지다 — 그 필드의 뜻은 "프레임 뒤에 남은 바이트"이지 "해석하지 않은 프레임"이 아니고, **Userdata 응답은 서버 방향에 실리는데 순회기의 꼬리 규칙은 `client`만 본다.** 결과적으로:
+
+- Userdata만 실린 대화 → Job 방향이 0개라 `client = null` → 관찰 0건 → **`UNDECIDABLE` 대화** 1개, 관찰 1건
+- Job과 Userdata가 섞인 대화 → **해독한 대화**, 관찰은 Job 개수 + 꼬리 `UNDECIDABLE` **1건**(Userdata 프레임 수·방향과 무관하게 한 건)
 
 이 규칙은 함수코드 매핑이 아니라 **프레임 단계의 규칙**이므로 아래 Access 표에 넣지 않는다.
 
-**S1·S2·R1~R5가 S7 경로에 존재하지 않는다.** 프레임이 스스로 요청임을 선언하므로 SYN도, PDU 형태도, 신호 결합도 필요 없다. 응답만 잡힌 단방향 캡처에도 별도 가드(1차 R5)가 필요 없다 — 관찰이 0건이 되고 §3의 종결 규칙이 그 대화를 `UNDECIDABLE`로 센다.
-
-남는 판정 불가는 하나다. **양쪽 방향에 모두 Job이 있으면** 한 4-tuple에 연결이 둘 묶였거나 재조립이 어긋난 것이므로 `client = null`이다. 1차 S2의 "양쪽이 같은 형태면 모순"과 같은 판단이며, 그 대화의 Job은 **하나도 관찰되지 않는다**(§8의 계수 주의사항).
+**S1·S2·R1~R5가 S7 경로에 존재하지 않는다.** 프레임이 스스로 요청임을 선언하므로 SYN도, PDU 형태도, 신호 결합도 필요 없다. 응답만 잡힌 단방향 캡처에도 별도 가드(1차 R5)가 필요 없다 — 위 기본 규칙이 `client = null`을 내고 §3의 종결 규칙이 그 대화를 `UNDECIDABLE`로 센다. 1차가 신호 둘과 결합 규칙 다섯 줄로 하던 일을 **필드 하나가 대신한다.**
 
 ### Access 매핑
 
@@ -201,11 +226,13 @@ S7     32 <rosctr:1> <redundancy:2> <pdu-ref:2> <param-len:2> <data-len:2>
 **1200SYM (syntax id `0xb2`) — 문법을 못박는다.**
 
 ```
-항목 바이트: b2 <reserved:1> <area1:2> <area2:2> <crc:4> <lid:4>*
-표기:        sym:<area>/<lid>[/<lid>...]
+항목:  12 <len:1> b2 <reserved:1> <area1:2> <area2:2> <crc:4> <lid:4>*
+표기:  sym:<area>/<lid>[/<lid>...]
 ```
 
-`<area>`는 `area2` 코드에서 온다 — 실캡처에 나타난 값은 `0x0052` 하나뿐이고 이는 Flags(M)이므로 `m`으로 쓴다. **표에 없는 코드는 이름을 지어내지 않고 `0x____` 원시 16진수로 쓴다.** `<lid>`는 각 LID 워드의 하위 28비트 값을 10진수로 쓴다(상위 4비트는 플래그다). §4의 예시 바이트 `... 0000 0052 ea2db0d9 40000010`은 `sym:m/16`이 된다. CRC는 표기에 넣지 않는다 — 주소가 아니라 심볼 무결성 값이다.
+**LID 개수는 `<len>`에서 나온다** — `len`은 syntax id 부터 세므로 `(len - 10) / 4`개다(§4 예시의 `0x0e` → 1개). 이 계산 없이는 항목을 몇 바이트 읽을지 알 수 없다.
+
+`<area>`는 **`area1`이 `0x0000`(IQMCT)일 때만** `area2` 코드에서 온다 — 실캡처에 나타난 값은 `0x0052` 하나뿐이고 이는 Flags(M)이므로 `m`으로 쓴다. **`area1`이 그 외 값이면 `area2`는 영역 코드가 아니라 DB 번호 계열이므로**(tshark가 `s7comm.tiap.item.dbnumber`를 따로 두는 이유다) 해석하지 않고 `sym:0x<area1>:0x<area2>/...` 원시 표기로 쓴다. 4SICS에는 `area1 != 0x0000`이 한 건도 없어 **그 경로는 실캡처로 검증되지 않는다.** 표에 없는 `area2` 코드도 이름을 지어내지 않고 `0x____`로 쓴다. `<lid>`는 각 LID 워드의 하위 28비트 값을 10진수로 쓴다(상위 4비트는 플래그다). §4의 예시 바이트 `... 0000 0052 ea2db0d9 40000010`은 `sym:m/16`이 된다. CRC는 표기에 넣지 않는다 — 주소가 아니라 심볼 무결성 값이다.
 
 **S7ANY (syntax id `0x10`)** — `db<n>.dbx<byte>.<bit>` · `m<byte>.<bit>` 등 관례 표기. area 코드 `0x81`=I · `0x82`=Q · `0x83`=M · `0x84`=DB · `0x1C`=C · `0x1D`=T.
 
@@ -224,7 +251,15 @@ S7     32 <rosctr:1> <redundancy:2> <pdu-ref:2> <param-len:2> <data-len:2>
 
 대가가 있다 — 99% S7인 캡처에서 Modbus가 얼마나 얇은지 리포트만 보고는 알 수 없다. 알고 감수한다. **이 단계의 목적은 이음매 판정이고 리포트를 건드리면 판정이 흐려진다.** 프로토콜별 분리는 판정 후 별도 작업이다.
 
-**샘플 산출물이 움직이는 것은 회귀가 아니라 예정된 결과다.** S7을 켜면 세 캡처 모두 해독/대상 외 대화 수가 바뀌고, `151020`·`151021`의 정책 파일은 지금 선언이 비어 있어 각각 약 2.4만·8.6만 건의 위반과 종료 코드 1을 내게 된다. A단계 작업에 **그 두 정책 파일에 S7 규칙을 넣고 `samples/README.md` 결과표를 다시 기록하는 일**을 포함한다. 이것을 하지 않으면 기록된 결과가 그냥 틀린 값이 된다.
+**샘플 산출물이 움직이는 것은 회귀가 아니라 예정된 결과다.** S7을 켜면 **세 캡처 모두** 수치가 바뀐다:
+
+| 캡처 | 지금 | S7 을 켜면 |
+|---|---|---|
+| 151020 | 위반 0 · 종료 0 | 정책이 비어 있어 약 2.4만 건 위반 · 종료 1 |
+| 151021 | 위반 0 · 종료 0 | 정책이 비어 있어 약 8.6만 건 위반 · 종료 1 |
+| 151022 | 위반 21,028 (HIGH 20,980 · MEDIUM 48) · 종료 1 | S7 관찰 약 5.3만이 미선언으로 더해져 약 7.4만 건 · 종료 1 |
+
+151022는 종료 코드가 그대로라 눈에 덜 띄지만 **위반 내역 표가 틀린 값이 된다.** A단계 작업에 **세 정책 파일 전부에 S7 규칙을 넣고 `samples/README.md` 결과표와 위반 내역을 다시 기록하는 일**을 포함한다.
 
 ---
 
@@ -252,9 +287,12 @@ git diff --stat <A단계-시작-커밋>..HEAD -- pcap/src/main contract/src/main
 ### 실캡처 기대값 (tshark 4.6.8 대조)
 
 ```bash
-tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm.header.rosctr==1" \
-       -T fields -e s7comm.param.func | tr ',' '\n' | sort | uniq -c
+tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm" \
+       -T fields -e s7comm.header.rosctr -e s7comm.param.func
+# 두 쉼표 목록을 같은 인덱스끼리 짝지어(zip) ROSCTR 1 인 PDU 의 func 만 센다
 ```
+
+**`-Y`는 `-e`를 제한하지 않는다.** `-Y "rosctr==1"`로 거르고 `-e s7comm.param.func`만 뽑으면 통과한 패킷 안의 **Job 이 아닌 PDU 의 func 까지** 섞여 나온다. 두 필드를 함께 뽑아 인덱스로 짝지어야 한다. 위 방식으로 다시 세어 아래 표를 검증했고 값은 rev2와 같았다.
 
 `-T fields`는 한 패킷의 여러 S7 PDU를 쉼표로 나열하므로 위 명령은 **PDU 단위 계수**이며 Huginn의 프레임 단위와 같은 단위다.
 
@@ -264,11 +302,22 @@ tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm.header.rosctr==1" \
 | 151021 | 86,403 | 86,339 | 48 | 16 |
 | 151022 | 53,217 | 53,196 | 14 | 7 |
 
-**Job 프레임 수는 관찰 수와 같지 않다.** 세 가지가 벌어지게 한다:
+같은 명령으로 얻은 ROSCTR 전체 분포(응답이 0건 관찰인지 확인할 기준):
+
+| 캡처 | 1 Job | 3 Ack_Data | 7 Userdata |
+|---|---:|---:|---:|
+| 151020 | 23,732 | 23,732 | 0 |
+| 151021 | 86,403 | 86,402 | **4** |
+| 151022 | 53,217 | 53,217 | 0 |
+
+151021은 Job이 Ack_Data보다 하나 많다 — 캡처가 끝나며 응답을 못 받은 요청이 하나 있다. Userdata는 **4SICS 전체에 4건**이고 전부 151021이다.
+
+**Job 프레임 수는 관찰 수와 같지 않다.** 네 가지가 벌어지게 한다:
 
 - 해독한 대화에 잔여·갭·절단·Userdata가 있으면 `UNDECIDABLE` 관찰이 대화마다 **하나씩 더** 붙는다(관찰 수 > Job 수 방향)
 - 양쪽 방향에 모두 Job이 있는 대화는 **Job을 하나도 관찰하지 않는다**(관찰 수 < Job 수 방향)
 - **tshark는 기본적으로 TCP를 재조립하지만 Huginn은 `contiguousPrefix`만 읽고 재동기화하지 않는다** — 갭이 있는 스트림에서 tshark가 세는 PDU를 Huginn은 못 볼 수 있다
+- **한 대화에서 두 해독기가 주장하면** 등록 순서로 진 쪽의 프레임이 통째로 버려진다(§3). 이 횟수를 세어 0인지 확인한다
 
 그래서 검증은 **"Job 수 = 관찰 수"가 아니라** 이렇게 한다: Job 대비 관찰 수의 차이를 측정해 기록하고, **각 차이가 위 셋 중 어느 것인지 대화 단위로 설명한다.** 1차에서 READ/WRITE 28건 차이를 "다중 프레임 계수 차이로 보인다"고 적고 끝냈는데, 같은 미결을 두 번 남기지 않는다.
 
@@ -278,8 +327,9 @@ tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm.header.rosctr==1" \
 
 ### 회귀 가드
 
-- **151022의 Modbus 판정이 위반 21,028건 그대로여야 한다.** 실측 기준선: 해독한 대화 56 · 대상 외 대화 932,655 · `UNDECIDABLE` 대화 24 · 관찰 48. 이 중 **Modbus 몫**이 변하면 순회기를 뽑아내면서 무언가 깨진 것이다(S7이 켜지면 총계는 당연히 움직인다 — Modbus 전용 실행으로 대조한다)
-- **`ModbusObserverTest` 20건과 `EndToEndTest` 11건을 한 줄도 고치지 않고 통과해야 한다.** 고쳐야 한다면 그것은 리팩터링이 아니라 동작 변경이다
+- **151022의 Modbus 판정이 위반 21,028건 그대로여야 한다.** 실측 기준선: 해독한 대화 56 · 대상 외 대화 932,655 · `UNDECIDABLE` 대화 24 · `UNDECIDABLE` 관찰 48.
+  **대조 방법**: `decode` 테스트 소스에 환경변수로 켜지는 회귀 테스트를 둔다 — `HUGINN_SAMPLES`가 가리키는 디렉터리에 캡처가 있을 때만 돌고 없으면 건너뛴다(`@EnabledIfEnvironmentVariable`). 그 테스트는 `TrafficObserver.observe(streams, List.of(new ModbusDecoder()))`로 **Modbus만 등록해** 돌려 위 다섯 수치를 단언한다. 캡처는 저장소에 없고(라이선스) 테스트 소스는 §7의 측정 밖이라 이음매 예산을 쓰지 않는다. CLI에 `--only=` 같은 플래그를 다는 것은 `cli/src/main` 변경이라 §7을 넘긴다
+- **`ModbusObserverTest` 20건과 `cli` 테스트 11건(`EndToEndTest` 10 + `ExamplePolicyTest` 1)을 한 줄도 고치지 않고 통과해야 한다.** 고쳐야 한다면 그것은 리팩터링이 아니라 동작 변경이다
 
 ### 새로 필요한 테스트
 
@@ -293,7 +343,8 @@ tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm.header.rosctr==1" \
 - Job과 Userdata가 섞이면 해독한 대화 + 꼬리 `UNDECIDABLE` 관찰 1건
 - 양쪽 방향에 모두 Job이 있으면 판정 불가다
 - Modbus 대화와 S7 대화가 한 캡처에 섞여도 세 계수의 합이 전체 대화 수다
-- **어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다** (§3의 불가능성 주장을 실제로 확인한다)
+- **어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다** — 예시 몇 개로 "증명"하지 않는다. 오프셋 0의 바이트 2~3이 두 프레이머의 유일한 교차 제약이므로 **65,536개 값을 전부 돌려** 두 수용 조건이 동시에 참인 경우가 없음을 단언한다
+- **한 대화의 두 방향이 서로 다른 해독기에 걸리면** 등록 순서로 하나가 이기고 다른 쪽 프레임이 버려진다는 것을 고정한다(§3). 실캡처에서 이 횟수가 0인지는 별도로 측정해 기록한다
 - 1200SYM `sym:m/16` 표기가 §4의 실제 바이트에서 나온다
 
 ### 반증 조건의 시험 방법
@@ -309,3 +360,4 @@ tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm.header.rosctr==1" \
 - **1차 Modbus 판정이 하나라도 움직이면** → 공용 순회기를 뽑아내면서 Modbus 고유 로직을 함께 옮긴 것이다
 - **1200SYM 표기가 tshark의 `area2`·LID 필드와 어긋나면** → 주소 구조를 잘못 읽은 것이다. 근거 표시용이라 판정을 흔들지는 않지만, 운영자가 조치할 수 없는 근거는 없느니만 못하다
 - **어떤 바이트열이 두 프레이머에 동시에 걸리면** → §3의 "충돌은 불가능하다"가 틀린 것이고, 등록 순서로 이기는 규칙이 조용한 오판이 된다
+- **한 대화에서 두 해독기가 주장한 횟수가 4SICS에서 0이 아니면** → 스트림 단위 불가능성이 대화 단위로 올라가지 못한다는 뜻이며, 등록 순서 규칙이 실제로 프레임을 버리고 있다는 신호다
