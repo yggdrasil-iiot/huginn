@@ -772,7 +772,7 @@ void 페이로드가_0x32가_아니면_소비하되_세지_않는다() {
 void TPKT_길이_정합성이_깨지면_그_지점부터_미해독이다() {
     // param-len 을 부풀린 프레임. 남은 전부가 미해독이고 재동기화하지 않는다.
     byte[] frame = S7Fixtures.job(S7Fixtures.readVar(S7Fixtures.sym(0, 0x52, 16)));
-    frame[13] = (byte) (frame[13] + 1);                 // S7 헤더의 param-len 하위 바이트
+    frame[13] = (byte) (frame[13] + 1);                 // S7 헤더 param-len 의 **상위** 바이트(+256)
     byte[] stream = S7Fixtures.concat(frame, S7Fixtures.job(S7Fixtures.setupCommunication()));
 
     S7FramingResult r = S7Framer.frames(stream);
@@ -987,6 +987,12 @@ void 파라미터가_짧으면_지어내지_않는다() {
 }
 
 @Test
+void 입력과_출력도_표기한다() {
+    assertEquals("i0.0", S7ObjectRef.of(S7Fixtures.readVar(S7Fixtures.s7any(0x81, 0, 0, 0))));
+    assertEquals("q4.1", S7ObjectRef.of(S7Fixtures.readVar(S7Fixtures.s7any(0x82, 0, 4, 1))));
+}
+
+@Test
 void 카운터와_타이머는_비트_주소가_없다() {
     assertEquals("c3", S7ObjectRef.of(S7Fixtures.readVar(S7Fixtures.s7any(0x1C, 0, 3, 0))));
     assertEquals("t7", S7ObjectRef.of(S7Fixtures.readVar(S7Fixtures.s7any(0x1D, 0, 7, 0))));
@@ -1028,7 +1034,7 @@ void 첫_항목을_못_읽어도_항목_수는_적는다() {
 - `itemCount > 1` 이면 뒤에 ` (+<itemCount-1>)`. **첫 항목을 못 읽어 `fc:<n>` 이 된 경우에도 붙인다** — 항목이 여럿이라는 사실은 첫 항목을 읽었는지와 무관하다
 - `fc:<n>` 의 `<n>` 은 **`parameter[0] & 0xFF`** 다. 부호 있는 byte 로 쓰면 `0xF0` 이 `-16` 으로 나온다
 
-- [ ] **Step 4: 통과 확인** — `Tests run: 11, Failures: 0`
+- [ ] **Step 4: 통과 확인** — `Tests run: 12, Failures: 0`
 
 - [ ] **Step 5: 커밋**
 
@@ -1047,7 +1053,7 @@ git commit -m "feat: S7 objectRef — 실캡처는 100% 1200SYM 이고 S7ANY 는
 
 테스트는 `TrafficObserver.observe(streams, List.of(new S7Decoder()))` 로 돌린다 — 해독기 단독이 아니라 순회기까지 함께 돌려야 계수 규칙이 검증된다.
 
-공통 헬퍼와 상수:
+공통 헬퍼와 상수(`import static dev.krillin.huginn.decode.S7Fixtures.sym;` 을 함께 둔다 — 아래 스케치가 `sym(...)` 을 한정 없이 부른다):
 
 ```java
     private static final String HMI = "10.0.1.20", PLC = "10.0.2.11";
@@ -1329,6 +1335,8 @@ void 어떤_바이트열도_두_프레이머에_동시에_걸리지_않는다() 
     }
 }
 
+// 후보가 최대 64KB 라 이 루프는 수 GB 를 할당했다 버린다. 10초 안팎 걸릴 수 있다 — 멈춘 게 아니다.
+
 /** 두 **실제** 프레이머를 돌린다 — 수용 조건을 테스트가 재구현하면 사본을 검증하게 된다. */
 private boolean claimedByBoth(byte[] candidate) {
     return !ModbusFramer.frames(candidate).frames().isEmpty()
@@ -1394,6 +1402,7 @@ bash scripts/fetch-samples.sh      # 또는  pwsh scripts/fetch-samples.ps1
 package dev.krillin.huginn.decode;
 
 import dev.krillin.huginn.pcap.*;
+import dev.krillin.huginn.reconcile.Access;      // undecidableCount 가 쓴다 — pcap 이 아니라 reconcile 이다
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
@@ -1499,7 +1508,12 @@ class RealCaptureTest {
 }
 ```
 
-> **기대값이 어긋나면 값을 고치지 말고 원인을 찾는다.** 다만 무엇이 어긋난 것인지 구별한다 — `frameObservations`가 tshark Job 수와 다르면 프레이밍이나 방향 판정 문제이고(설계 §9의 반증 조건), **총 관찰 수가 Job 수보다 큰 것은 정상**이다(꼬리·판정 불가 관찰). 후자를 버그로 쫓지 않는다.
+> **기대값이 어긋나면 값부터 고치지 말고 원인을 찾는다.** 다만 어긋남에는 두 종류가 있다.
+>
+> - **총 관찰 수가 Job 수보다 큰 것은 정상**이다 — 꼬리·판정 불가 관찰이 더해진 것이다. 버그로 쫓지 않는다.
+> - **`frameObservations`가 Job 수보다 작은 것도 정당할 수 있다.** 설계 §8의 네 원인 중 둘(양방향 요청 대화는 그 Job 을 하나도 관찰하지 않는다, tshark 는 TCP 를 재조립하지만 Huginn 은 `contiguousPrefix` 만 읽는다)이 이 방향으로 작용한다.
+>
+> 그러므로 순서는 이렇다 — 차이가 나면 **먼저 대화 단위로 원인을 규명한다.** 프레이밍이나 방향 판정 결함이면 고친다(설계 §9의 반증 조건). 위 두 정당한 원인으로 설명되면 **`samples/README.md`에 그 설명과 함께 기록하고, 단언을 측정값으로 낮추되 주석에 이유를 남긴다.** 설명 없이 숫자만 바꾸는 것이 금지된 것이지, 설명된 차이를 반영하는 것이 금지된 게 아니다.
 
 - [ ] **Step 2: 캡처 없이 도는지 확인 — 건너뛰어야 한다**
 
@@ -1638,9 +1652,13 @@ Expected(합격): 두 파일뿐이고 합계 4줄 안팎
 - "하지 않는 것" 표에서 **S7comm 행을 옮긴다** — 1차의 "1차에서 증명할 것은 프로토콜 개수가 아니다"는 이제 유효하지 않다. S7comm-plus·Userdata·CONTROL(B단계 전)로 대체한다
 - 주장→테스트 표에 S7 행 추가
 
-- [ ] **Step 4: 전체 검증**
+- [ ] **Step 4: 기준 파일을 지우고 전체 검증**
 
-Run: `mvn test`
+```bash
+rm .huginn-a-base      # Task 0 이 만든 로컬 파일. 남기면 워킹트리가 깨끗하지 않다
+```
+
+Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`
 
 Run: `git status -sb`
