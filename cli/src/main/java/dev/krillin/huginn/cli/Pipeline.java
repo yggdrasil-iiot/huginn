@@ -46,6 +46,8 @@ final class Pipeline {
             observed.skippedConversations(),
             observed.undecidableConversations(),
             reconciled.undecidableCount(),
+            observed.unobservedBytes(),
+            observed.industrialBytes(),
             reconciled.findings());
     }
 }
