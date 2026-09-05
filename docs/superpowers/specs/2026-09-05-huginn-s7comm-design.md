@@ -1,6 +1,6 @@
 # Huginn 2차 — S7comm 해독
 
-- 상태: 초안 rev5 (2026-09-05) — 4차 리뷰 반영. 진단의 생산 경로와 잔여 표현 정리
+- 상태: **승인** rev6 (2026-09-05) — 리뷰 5라운드 완료. 블로커 23건 반영
 - 선행: [1차 설계](2026-09-05-huginn-design.md) · 저장소 `yggdrasil-iiot/huginn` · Java 17 · Apache-2.0
 
 ---
@@ -108,8 +108,11 @@ record StreamEvidence(TcpStream stream, int frameCount, boolean leftoverBytes) {
  * @param bothDirectionsRequested  client == null 인 이유가 **요청 방향이 둘**이어서인가.
  *                            0 개(응답만 잡힘·Userdata 만)와 2 개(한 4-tuple 에 연결이 둘)를
  *                            순회기는 구별할 수 없다 — 둘 다 frameCount > 0 이기 때문이다.
- *                            해독기만 아는 사실이므로 해독기가 싣는다. S7 은 Job 방향이 2 개일 때,
- *                            Modbus 는 R1(양쪽이 같은 형태)일 때 세운다. client != null 이면 false
+ *                            해독기만 아는 사실이므로 해독기가 싣는다. S7 은 Job 방향이 2 개일 때 세운다.
+ *                            Modbus 는 R1 중 **양쪽이 REQUEST_ONLY** 인 경우에만 세운다 — R1 은
+ *                            코드상 requestCount > 1 || responseCount > 1 이고, 양쪽이
+ *                            RESPONSE_ONLY 인 쪽은 요청 방향이 **0 개**라 false 다.
+ *                            client != null 이면 false
  */
 record Decoded(List<Observation> requestObservations, StreamEvidence client,
                boolean tailUndecidable, boolean bothDirectionsRequested) { }
@@ -136,8 +139,9 @@ public final class TrafficObserver {
 
     /**
      * 진단까지 함께 낸다 — **테스트 전용**이다. ObservationResult 는 손대지 않는다(§6).
-     * multiClaimConversations 는 한 대화에서 둘 이상이 주장한 횟수(§3),
-     * bothDirectionRequestConversations 는 양쪽 방향이 모두 요청을 실은 대화 수(§5)다.
+     * multiClaimConversations 는 한 대화에서 둘 이상이 주장한 횟수(§3)다.
+     * bothDirectionRequestConversations 는 순회기가 **Decoded.bothDirectionsRequested 가 참인
+     * 대화를 센 것**이며, 이긴 해독기를 가리지 않는 혼합 계수다(§8 참조).
      */
     static Diagnosed observeWithDiagnostics(List<TcpStream> streams, List<ProtocolDecoder> decoders) { ... }
 }
@@ -367,7 +371,7 @@ tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm" \
 | S7 관찰 총수 | 151020·151021은 정책이 비어 있어 **CLI로 얻는다** — 관찰 총수 = 위반 + `UNDECIDABLE` 관찰 |
 | Modbus 판정 불변(151022) | Modbus만 등록한 환경변수 회귀 테스트(아래) |
 | 두 해독기가 한 대화를 주장한 횟수 | **둘 다 등록한** 두 번째 환경변수 테스트에서 `observeWithDiagnostics`로 읽는다 |
-| 양쪽 방향에 모두 요청이 있는 대화 수 | 같은 진단 값(`bothDirectionRequestConversations`) |
+| 양쪽 방향에 모두 요청이 있는 대화 수 | 같은 진단 값(`bothDirectionRequestConversations`). **프로토콜 혼합 계수**다 — Modbus가 이긴 대화도 함께 세이므로, S7의 Job 차이를 설명할 때는 S7이 이긴 대화만 골라야 한다 |
 | Job 수와 관찰 수의 차이를 대화 단위로 설명 | `Diagnosed`는 정수 둘과 평평한 관찰 목록만 낸다. 관찰은 4-tuple을 들고 있으므로 **엔드포인트 쌍으로 묶어** tshark의 스트림별 Job 수와 맞춘다. 프레임 수는 순회기 밖으로 나오지 않으므로 갭·절단 원인은 이 대조로 좁힌 뒤 해당 대화만 따로 들여다본다 |
 
 **두 수치 모두 0일 것으로 예상하지만 확인 전에는 모른다.** 다만 둘의 무게가 다르다 — 다중 주장이 0이 아니면 §9의 반증 조건이 발동하지만, **양방향 요청 대화가 0이 아닌 것은 반증이 아니라** Job 수와 관찰 수가 벌어지는 정당한 원인(위 둘째 항목)이다. 세어서 차이를 설명하는 데 쓴다.
