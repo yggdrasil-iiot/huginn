@@ -4,7 +4,7 @@
 
 **Goal:** pcap 파일에서 Modbus/TCP 요청을 해독해 선언된 `CommunicationPolicy`와 대조하고, 미등록 통신을 근거와 함께 보고하는 CLI를 만든다.
 
-**Architecture:** 이음매(`Observation`)를 먼저 고정하고 아래로 내려간다. 순수 대사 로직 → pcap 읽기 → Modbus 해독 순. `decode` 밖은 프레이밍·함수코드를 모르며, 그 경계는 2차에 S7comm을 붙일 때 시험받는다. pcap·프로토콜 파싱은 외부 의존 없이 직접 구현해 테스트가 환경을 타지 않게 한다.
+**Architecture:** 이음매(`Observation`)를 먼저 고정하고 아래로 내려간다. 순수 대사 로직 → pcap 읽기 → Modbus 해독 순. 요청/응답 방향은 포트 관례가 아니라 **PDU 구조**로 판정한다 — 포트는 거울상을 구별하지 못한다. `decode` 밖은 프레이밍·함수코드를 모르며, 그 경계는 2차에 S7comm을 붙일 때 시험받는다. pcap·프로토콜 파싱은 외부 의존 없이 직접 구현해 테스트가 환경을 타지 않게 한다.
 
 **Tech Stack:** Java 17 · Maven 멀티모듈 · JUnit 5.10.3 · Jackson(`contract` 모듈 한정) · 그 외 런타임 의존 없음
 
@@ -21,8 +21,8 @@
 | `contract/` | `huginn-contract` | `CommunicationPolicy` 로딩·검증 | Jackson(YAML) | `huginn-reconcile` |
 | `reconcile/` | `huginn-reconcile` | `Observation` 이음매, 대사, `Finding` | **없음** | 없음 |
 | `pcap/` | `huginn-pcap` | pcap 파일 → 패킷 → TCP 스트림 | **없음** | 없음 |
-| `decode/` | `huginn-decode` | MBAP 프레이밍·함수코드 → `Observation` | **없음** | `huginn-reconcile` · `huginn-pcap` |
-| `cli/` | `huginn-cli` | 배선·리포트 | **없음** | 위 전부 · `huginn-pcap`·`huginn-decode` test-jar(테스트 한정, Task 13) |
+| `decode/` | `huginn-decode` | MBAP 프레이밍·함수코드·PDU 형태 → `Observation` | **없음** | `huginn-reconcile` · `huginn-pcap` |
+| `cli/` | `huginn-cli` | 배선·리포트 | **없음** | 위 전부 · `huginn-pcap`·`huginn-decode` test-jar(테스트 한정, Task 14) |
 
 **`서드파티` 열의 "없음"은 런타임 서드파티 라이브러리가 없다는 뜻이다.** 모듈 간 의존은 `모듈 간` 열대로 있다.
 
@@ -719,7 +719,7 @@ import java.nio.ByteOrder;
 
 /**
  * 테스트용 pcap 조립기. 외부 캡처 파일 없이 결정적으로 검증하기 위한 것이다.
- * <p>Task 13 의 cli E2E 테스트가 test-jar 를 통해 이것을 그대로 쓴다 — 그래서 클래스도
+ * <p>Task 14 의 cli E2E 테스트가 test-jar 를 통해 이것을 그대로 쓴다 — 그래서 클래스도
  * 정적 팩터리도 인스턴스 메서드도 전부 public 이다(private 생성자만 예외).
  * 클래스만 public 으로 두면 다른 패키지에서 ethernet() 부터 막힌다. 복제하면 두 벌이 갈라진다.
  * withSnaplen 은 PcapReader 가 snaplen 을 읽지도 쓰지도 않아 소비자가 없으므로 두지 않는다.
@@ -1382,11 +1382,11 @@ git commit -m "feat: TCP 스트림 재조립 — SYN-without-ACK 기록, 갭 이
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/FramingResult.java`
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/ModbusFramer.java`
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/ModbusFramerTest.java`
-- Create: `decode/src/test/java/dev/krillin/huginn/decode/ModbusFixtures.java` — Task 11·12 와 공유하는 픽스처
+- Create: `decode/src/test/java/dev/krillin/huginn/decode/ModbusFixtures.java` — Task 11·12·13·14 와 공유하는 픽스처
 
 MBAP: 트랜잭션ID(2) · 프로토콜ID(2, **반드시 0**) · 길이(2) · 유닛ID(1) · PDU.
 
-테스트 픽스처는 `decode/src/test/java/dev/krillin/huginn/decode/ModbusFixtures.java`에 모은다. **Task 11·12 는 물론 Task 13 의 `cli` E2E 도 같은 것을 쓰므로 `public final class`이고 세 메서드도 `public static`이다** — `private`이면 Task 12 가 `ModbusFixtures.mbap(...)`을 부르는 순간, 패키지-프라이빗이면 Task 13 이 부르는 순간 컴파일이 깨진다. (청크 2 의 `PcapBuilder` 는 `pcap` 모듈 테스트 소스라 여기서 보이지 않는다.)
+테스트 픽스처는 `decode/src/test/java/dev/krillin/huginn/decode/ModbusFixtures.java`에 모은다. **Task 11·12·13 은 물론 Task 14 의 `cli` E2E 도 같은 것을 쓰므로 `public final class`이고 세 메서드도 `public static`이다** — `private`이면 Task 12·13 이 `ModbusFixtures.mbap(...)`을 부르는 순간, 패키지-프라이빗이면 Task 14 가 부르는 순간 컴파일이 깨진다. (청크 2 의 `PcapBuilder` 는 `pcap` 모듈 테스트 소스라 여기서 보이지 않는다.)
 
 ```java
 public final class ModbusFixtures {
@@ -1629,7 +1629,141 @@ git commit -m "feat: objectRef — 무엇을 건드렸는지 근거에 남긴다
 
 ---
 
-### Task 12: `ModbusObserver` — 스트림에서 요청만 관찰한다
+### Task 12: `ModbusShape` — PDU 형태로 요청/응답을 가른다
+
+**Files:**
+- Create: `decode/src/main/java/dev/krillin/huginn/decode/ModbusShape.java`
+- Test: `decode/src/test/java/dev/krillin/huginn/decode/ModbusShapeTest.java`
+
+**왜 필요한가.** 포트만으로 방향을 판정하면 **거울상을 원리적으로 구별할 수 없다.** "낮은 쪽이 서버"라는 전제는 낮은 쪽이 정말 리스닝 포트일 때만 참인데, 포트 번호만 보고는 확인할 방법이 없다. 조건을 좁혀도 구멍은 막히지 않고 경계 너머로 옮겨간다(Task 13 신호 표 아래 개정 이력 참조). 그래서 **프레임 구조 자체로 판정한다** — 설계 §5-①의 "포트가 아니라 프레이밍으로 판정한다"를 방향 판정에도 그대로 적용하는 것이다.
+
+Modbus는 같은 함수코드라도 요청과 응답의 PDU 구조가 다르다. `ModbusFrame.pdu`는 함수코드를 뺀 나머지다.
+
+| 함수코드 | 요청 PDU | 응답 PDU |
+|---|---|---|
+| 1·2 (코일·이산입력 읽기) | 주소2 + 수량2 = **4** | 바이트수1 + N = **1 + pdu[0]** |
+| 3·4 (레지스터 읽기) | 주소2 + 수량2 = **4** | 바이트수1 + 2N = **1 + pdu[0]**, `pdu[0]`은 **항상 짝수** |
+| 15·16 (다중 쓰기) | 주소2 + 수량2 + 바이트수1 + 데이터 = **5 + pdu[4]**, 최소 6 | 주소2 + 수량2 = **정확히 4** |
+| 5·6·22 | 에코 — 요청과 응답이 **같다** | 같다 |
+
+**HIGH를 만드는 것이 정확히 FC 15·16이고, 그 둘이 길이만으로 완전히 갈린다.** 오탐 경로를 정면으로 닫는 신호다.
+
+- [ ] **Step 1: 실패하는 테스트 작성**
+
+```java
+@Test
+void FC3_요청은_정확히_4바이트다() {
+    assertEquals(ModbusShape.REQUEST_ONLY, ModbusShape.of(3, ModbusFixtures.pdu(0, 2)));
+}
+
+@Test
+void FC3_응답은_바이트수가_짝수라_요청과_겹치지_않는다() {
+    // 4바이트 응답이려면 바이트수가 3이어야 하는데 레지스터 응답의 바이트수는 항상 2N 이다.
+    assertEquals(ModbusShape.RESPONSE_ONLY, ModbusShape.of(3, new byte[]{4, 0, 1, 0, 2}));
+}
+
+@Test
+void FC16_응답은_정확히_4바이트다() {
+    // 주소2 + 수량2. 요청은 바이트수 필드와 데이터가 더 붙어 최소 6바이트다.
+    assertEquals(ModbusShape.RESPONSE_ONLY, ModbusShape.of(16, new byte[]{0, 0, 0, 2}));
+}
+
+@Test
+void FC16_요청은_4바이트가_아니다() {
+    assertEquals(ModbusShape.REQUEST_ONLY, ModbusShape.of(16, new byte[]{0, 0, 0, 2, 4, 0, 1, 0, 2}));
+}
+
+@Test
+void FC1_응답의_바이트수가_3이면_요청과_구별할_수_없다() {
+    // 코일 응답의 바이트수는 홀수도 가능하다(17~24개 코일 → 3바이트).
+    // 그때 응답 PDU 도 4바이트라 요청과 겹친다 — 단정하지 않는다.
+    assertEquals(ModbusShape.UNKNOWN, ModbusShape.of(1, new byte[]{3, 0x0F, 0x0F, 0x0F}));
+}
+
+@Test
+void FC6은_요청과_응답이_같아_형태를_모른다() {
+    // 단일 쓰기는 응답이 요청의 에코다. 원리적으로 구별할 수 없다.
+    assertEquals(ModbusShape.UNKNOWN, ModbusShape.of(6, ModbusFixtures.pdu(0, 1)));
+}
+
+@Test
+void 매핑에_없는_함수코드는_형태를_모른다() {
+    assertEquals(ModbusShape.UNKNOWN, ModbusShape.of(43, new byte[]{14, 1, 0}));
+}
+
+@Test
+void 짧은_PDU에도_예외가_아니라_UNKNOWN이다() {
+    // pdu[4] 를 보기 전에 길이를 먼저 확인해야 한다.
+    assertEquals(ModbusShape.UNKNOWN, ModbusShape.of(16, new byte[]{0, 0}));
+    assertEquals(ModbusShape.UNKNOWN, ModbusShape.of(3, new byte[0]));
+}
+
+@Test
+void 스트림에_두_형태가_섞이면_방향을_모른다() {
+    // 재조립이 어긋났거나 캡처가 섞였다. 다수결로 밀어붙이지 않는다.
+    assertEquals(ModbusShape.UNKNOWN, ModbusShape.ofStream(List.of(
+        new ModbusFrame(1, 1, 3, ModbusFixtures.pdu(0, 2)),          // REQUEST_ONLY
+        new ModbusFrame(2, 1, 3, new byte[]{4, 0, 1, 0, 2}))));      // RESPONSE_ONLY
+}
+
+@Test
+void 형태를_아는_프레임이_하나도_없으면_모른다() {
+    assertEquals(ModbusShape.UNKNOWN, ModbusShape.ofStream(List.of(
+        new ModbusFrame(1, 1, 6, ModbusFixtures.pdu(0, 1)))));
+}
+
+@Test
+void 아는_프레임이_하나라도_있고_충돌이_없으면_그_형태다() {
+    assertEquals(ModbusShape.REQUEST_ONLY, ModbusShape.ofStream(List.of(
+        new ModbusFrame(1, 1, 6, ModbusFixtures.pdu(0, 1)),          // UNKNOWN
+        new ModbusFrame(2, 1, 16, new byte[]{0, 0, 0, 2, 4, 0, 1, 0, 2}))));
+}
+```
+
+- [ ] **Step 2: 실패 확인**
+
+Run: `mvn -pl decode -am test`
+Expected: 컴파일 실패 — `ModbusShape` 없음
+
+- [ ] **Step 3: 구현**
+
+```java
+/** 한 프레임 또는 한 방향이 요청인지 응답인지. 단정할 수 없으면 UNKNOWN 이다. */
+public enum ModbusShape { REQUEST_ONLY, RESPONSE_ONLY, UNKNOWN }
+```
+
+`ModbusShape`는 **`public enum`**, `of`·`ofStream`은 **`public static`**이다 — Task 13의 `ModbusObserver`가 부른다(같은 패키지지만 계약이므로 일관되게 둔다).
+
+`ModbusShape.of(int functionCode, byte[] pdu)` — 아래에 걸리지 않으면 전부 `UNKNOWN`이다. **애매하면 UNKNOWN이다. 단정이 오검출보다 비싸다.**
+
+| 조건 | 결과 |
+|---|---|
+| FC 3·4 이고 `pdu.length == 4` | `REQUEST_ONLY` |
+| FC 3·4 이고 `pdu.length != 4` 이고 `pdu.length == 1 + u(pdu[0])` 이고 `u(pdu[0])`이 짝수 | `RESPONSE_ONLY` |
+| FC 1·2 이고 `pdu.length == 4` 이고 `u(pdu[0]) != 3` | `REQUEST_ONLY` |
+| FC 1·2 이고 `pdu.length != 4` 이고 `pdu.length == 1 + u(pdu[0])` | `RESPONSE_ONLY` |
+| FC 15·16 이고 `pdu.length == 4` | `RESPONSE_ONLY` |
+| FC 15·16 이고 `pdu.length >= 6` 이고 `pdu.length == 5 + u(pdu[4])` | `REQUEST_ONLY` |
+
+`u(b)`는 `b & 0xFF`다. **인덱스에 닿기 전에 길이를 먼저 확인한다** — 짧은 PDU 에서 `ArrayIndexOutOfBoundsException`이 나면 안 된다.
+
+`ModbusShape.ofStream(List<ModbusFrame> frames)` — 각 프레임의 형태를 모아, **`REQUEST_ONLY`와 `RESPONSE_ONLY`가 섞여 있으면 `UNKNOWN`**, 한쪽만 있으면 그 형태, 전부 `UNKNOWN`이면 `UNKNOWN`.
+
+- [ ] **Step 4: 통과 확인**
+
+Run: `mvn -pl decode -am test`
+Expected: `decode` 모듈 `Tests run: 51, Failures: 0` (40 + `ModbusShapeTest` 11)
+
+- [ ] **Step 5: 커밋**
+
+```bash
+git add decode/src
+git commit -m "feat: PDU 형태로 요청/응답을 가른다 — 포트는 거울상을 구별하지 못한다"
+```
+
+---
+
+### Task 13: `ModbusObserver` — 스트림에서 요청만 관찰한다
 
 **Files:**
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/ModbusObserver.java`
@@ -1647,18 +1781,22 @@ git commit -m "feat: objectRef — 무엇을 건드렸는지 근거에 남긴다
 | 신호 | 성립 조건 | 가리키는 방향 |
 |---|---|---|
 | **S1 · SYN** | 대화의 두 방향 중 `sawSynOnly`가 참인 방향이 **정확히 하나**다. **캡처에 없는 방향은 거짓으로 본다** — 그래야 SYN만 잡힌 단방향 캡처가 판정된다 | 그 방향이 클라이언트. SYN-without-ACK는 연결을 연 쪽만 보내므로 정의상 확정적이다. **SYN+ACK가 `sawSynOnly`가 아닌 것이 이 신호의 전부다** — `syn` 비트만 봤다면 핸드셰이크가 잡힌 모든 대화에서 양쪽 다 서고, 서버→클라이언트만 잡힌 캡처가 "SYN 있음"으로 들어와 응답을 요청으로 읽는다 |
+| **S3 · PDU 형태** | 한 방향의 `ModbusShape.ofStream(...)`이 `REQUEST_ONLY`이고 반대 방향이 `REQUEST_ONLY`가 아니다(또는 그 반대로 한쪽만 `RESPONSE_ONLY`다) | `REQUEST_ONLY`인 방향이 클라이언트다. **포트를 전혀 보지 않는다** — 프레임 구조가 근거다(Task 12). 양쪽이 같은 형태로 나오면 미성립 |
 | **S2 · 포트** | 정확히 한쪽이 **1024 미만**이고 **다른 쪽이 32768 이상**이다. 그 외에는 **미성립** | 1024 미만인 쪽이 서버이므로 **그쪽으로 향하는 방향이 클라이언트다** |
 
 **결합 규칙:**
 
 - **R1.** S1이 성립하면 그 방향을 쓴다.
-- **R2.** 아니면 S2가 성립하면 그 방향을 쓴다.
-- **R3.** 아니면 **판정 불가**다. `UNDECIDABLE` 관찰 한 건을 남기고 **그 대화를 거기서 끝낸다.**
-- **R4.** R1·R2로 방향을 골랐는데 **그 방향이 캡처에 없으면**(응답만 잡힘) 역시 `UNDECIDABLE` 관찰 한 건을 남기고 끝낸다. 요청을 못 본 것이지 위반이 없는 것이 아니다.
+- **R2.** 아니면 S3가 성립하면 그 방향을 쓴다.
+- **R3.** 아니면 S2가 성립하면 그 방향을 쓴다.
+- **R4.** 아니면 **판정 불가**다. `UNDECIDABLE` 관찰 한 건을 남기고 **그 대화를 거기서 끝낸다.**
+- **R5.** R1~R3으로 방향을 골랐는데 **그 방향이 캡처에 없으면**(응답만 잡힘) 역시 `UNDECIDABLE` 관찰 한 건을 남기고 끝낸다. 요청을 못 본 것이지 위반이 없는 것이 아니다.
 
-R1~R3은 배타적이고 순서대로 소진되므로 어떤 입력도 정확히 하나로 떨어진다.
+R1~R4는 배타적이고 순서대로 소진되므로 어떤 입력도 정확히 하나로 떨어진다.
 
-**R3·R4가 이 규칙의 핵심이다.** "먼저 보낸 쪽"만으로 판정하면 한 방향만 잡힌 캡처에서 그 방향이 자동으로 "먼저"가 된다. 서버→클라이언트만 잡힌 캡처(비대칭 SPAN, PLC를 출발지로 건 BPF 필터, 요청 이후에 시작된 캡처)에서 **응답을 요청으로 읽고, FC 16 응답이 `WRITE`가 되고, PLC가 미등록 출발지가 되어 HIGH 오탐**이 난다. 설계 §5-⑤의 "서버 쪽을 판정할 수 없는 스트림은 `UNDECIDABLE`"이 정확히 이 경우를 가리킨다.
+**순서의 이유.** S1(SYN-without-ACK)은 정의상 확정적이다 — 연결을 연 쪽만 보낸다. S3는 프로토콜 구조에서 나오는 증거이고 관례에 기대지 않는다. S2는 관례일 뿐이라 **맨 뒤다.** S3가 `UNKNOWN`인 경우(FC 5·6·22 에코만 오가는 대화, 또는 프레임을 못 뽑은 방향)에만 S2가 실제로 쓰인다.
+
+**R4·R5가 이 규칙의 핵심이다.** "먼저 보낸 쪽"만으로 판정하면 한 방향만 잡힌 캡처에서 그 방향이 자동으로 "먼저"가 된다. 서버→클라이언트만 잡힌 캡처(비대칭 SPAN, PLC를 출발지로 건 BPF 필터, 요청 이후에 시작된 캡처)에서 **응답을 요청으로 읽고, FC 16 응답이 `WRITE`가 되고, PLC가 미등록 출발지가 되어 HIGH 오탐**이 난다. 설계 §5-⑤의 "서버 쪽을 판정할 수 없는 스트림은 `UNDECIDABLE`"이 정확히 이 경우를 가리킨다.
 
 **S2의 성립 조건이 왜 이렇게 좁은가.** 포트 휴리스틱은 **거울상을 원리적으로 구별하지 못한다.** "낮은 쪽이 서버"라는 전제는 낮은 쪽이 정말 리스닝 포트일 때만 참인데, 프레임만 보고는 그것을 확인할 방법이 없다. 조건을 좁히면 구멍이 막히는 게 아니라 **경계 너머로 옮겨갈 뿐이다.**
 
@@ -1673,7 +1811,7 @@ rev 5의 (b)는 [1024, 32768)을 "명백한 리스닝 범위"로 취급했는데
 
 (a)에도 상대 포트 가드를 붙였다. "한쪽만 1024 미만"만으로는 **클라이언트가 특권 포트를 바인딩한 경우**(502↔502만 허용하는 방화벽을 통과하려고 로컬 포트 502를 잡는 관행, Moxa MGate 류 게이트웨이의 client 모드)에 `502 → 8502` 대화에서 502를 서버로 지목해 응답을 요청으로 읽는다. 상대가 임시 포트로 보일 때만 쓴다.
 
-**남는 손실:** 두 포트가 같은 부류인 대화(`8502↔40000`, `55000↔49500`, `502↔502`)는 SYN이 없으면 `UNDECIDABLE`이다. 비표준 포트 우회가 여기 걸린다 — 미검출이지만 리포트가 `UNDECIDABLE 대화`로 드러내므로 운영자가 조사한다. HIGH 오탐보다 싸다는 것이 이 계획의 전제다.
+**그래서 S3를 앞에 두었다.** 포트 조건을 아무리 좁혀도 거울상은 남으므로, 포트로 되찾을 수 없는 것을 **프레임 구조로** 되찾는다. 비표준 포트 우회(`8502↔40000`, `55000↔49500`)도 읽기·다중쓰기 프레임이 오갔다면 S3가 판정한다. S2까지 못 가는 것은 **FC 5·6·22 에코만 오가면서 포트도 같은 부류인 대화**뿐이고, 그것은 `UNDECIDABLE`로 보고한다 — 미검출이지만 리포트가 드러내므로 운영자가 조사한다.
 
 **(원래 근거, 기록으로 남긴다.)** "두 포트가 다르면 낮은 쪽이 서버"라고만 두면 **비표준 고포트 우회에서 정확히 그 HIGH 오탐이 난다.** 서버 `55000`, 클라이언트 임시 포트 `49500`인 대화의 PLC 방향만 잡힌 캡처를 보자 — 낮은 쪽은 49500이므로 "49500으로 향하는 방향"인 **서버 방향이 클라이언트로 지목되고**, R4의 단방향 가드는 지목한 방향이 캡처에 있으므로 발동하지 않는다. FC 16 응답은 주소·수량을 에코하므로 프레이밍·함수코드 검증을 그대로 통과해 `WRITE`가 되고, PLC가 미등록 출발지가 된다. **502에서는 안 나고 고포트 우회에서만 나는데, 하필 이 도구가 가장 잡아야 할 대상이다.** (a)·(b)는 "한쪽이 명백히 리스닝 포트로 보일 때만" 쓰겠다는 조건이고, 55000/49500은 둘 다 임시 포트 범위라 미성립 → R3으로 떨어져 `UNDECIDABLE`이 된다.
 
@@ -1809,23 +1947,24 @@ void 양쪽_다_임시_포트면_판정_불가다() {
 }
 
 @Test
-void 서버_포트가_더_높으면_판정하지_않는다() {
+void 서버_포트가_더_높아도_PDU_형태로_판정한다() {
     // 거울상 가드 ①. 클라 1288(WinCE HMI 임시 포트) / 서버 50502.
     // "낮은 쪽이 서버" 계열 규칙은 1288 을 서버로 지목해 응답을 요청으로 읽고,
     // FC 16 응답이 WRITE 가 되어 PLC 가 미등록 출발지로 HIGH 오탐이 난다.
-    // 양방향이 다 잡혀 있어 단방향 가드(R4)가 구제하지 못한다.
+    // 양방향이 다 잡혀 있어 단방향 가드(R5)가 구제하지 못한다.
+    // S3 가 포트를 보지 않고 9바이트 요청 / 4바이트 응답으로 갈라 준다.
     ObservationResult r = observe(
         stream("10.0.1.20", 1288, "10.0.2.11", 50502,
                ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2, 4, 0, 1, 0, 2})),
         stream("10.0.2.11", 50502, "10.0.1.20", 1288,
                ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2})));
     assertEquals(1, r.observations().size());
-    assertEquals(Access.UNDECIDABLE, r.observations().get(0).access());
-    assertEquals(1, r.undecidableConversations());
+    assertEquals("10.0.1.20", r.observations().get(0).source().address());
+    assertEquals(Access.WRITE, r.observations().get(0).access());
 }
 
 @Test
-void 클라이언트가_특권_포트를_바인딩해도_판정하지_않는다() {
+void 클라이언트가_특권_포트를_바인딩해도_PDU_형태로_판정한다() {
     // 거울상 가드 ②. 502↔502 만 허용하는 방화벽을 지나려고 로컬 포트 502 를 바인딩한
     // 클라이언트(또는 Moxa MGate 류 게이트웨이의 client 모드). "한쪽만 1024 미만" 만으로는
     // 502 를 서버로 지목해 8502→502 응답 방향을 클라이언트로 읽는다.
@@ -1835,7 +1974,35 @@ void 클라이언트가_특권_포트를_바인딩해도_판정하지_않는다(
         stream("10.0.2.11", 8502, "10.0.1.30", 502,
                ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2})));
     assertEquals(1, r.observations().size());
+    assertEquals("10.0.1.30", r.observations().get(0).source().address());
+}
+
+@Test
+void 형태도_포트도_못_가리면_판정_불가다() {
+    // FC 6 은 응답이 요청의 에코라 S3 가 UNKNOWN 이고, 1288↔50502 는 둘 다
+    // 1024 이상이라 S2 도 미성립이다. S3 를 넣었다고 해서 아무거나 단정하지 않는다.
+    ObservationResult r = observe(
+        stream("10.0.1.20", 1288, "10.0.2.11", 50502,
+               ModbusFixtures.mbap(1, 1, 6, ModbusFixtures.pdu(0, 1))),
+        stream("10.0.2.11", 50502, "10.0.1.20", 1288,
+               ModbusFixtures.mbap(1, 1, 6, ModbusFixtures.pdu(0, 1))));
+    assertEquals(1, r.observations().size());
     assertEquals(Access.UNDECIDABLE, r.observations().get(0).access());
+    assertEquals(1, r.undecidableConversations());
+}
+
+@Test
+void 형태가_포트와_어긋나면_형태가_이긴다() {
+    // S3 가 S2 보다 앞이라는 것을 못박는다. 포트는 502 로 향하는 방향을 클라이언트로
+    // 지목하지만, PDU 형태는 그 방향이 응답임을 말한다 — 502 를 바인딩한 클라이언트다.
+    // 관례보다 구조가 이긴다.
+    ObservationResult r = observe(
+        stream("10.0.2.11", 40000, "10.0.1.30", 502,
+               ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2})),          // 응답 형태
+        stream("10.0.1.30", 502, "10.0.2.11", 40000,
+               ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2, 4, 0, 1, 0, 2})));  // 요청 형태
+    assertEquals(1, r.observations().size());
+    assertEquals("10.0.1.30", r.observations().get(0).source().address());
 }
 
 @Test
@@ -1908,8 +2075,8 @@ public record ObservationResult(List<Observation> observations,
 1. 각 스트림에 `ModbusFramer.frames(stream.contiguousPrefix())`를 돌린다
 2. 스트림을 **4-tuple을 뒤집어 짝지어 대화로 묶는다**. 키는 두 (주소, 포트) 쌍을 **주소 문자열 오름차순, 같으면 포트 오름차순**으로 정렬한 것이라 방향에 무관하다. 포트가 다르면 다른 키이므로 같은 호스트 쌍의 연결 둘은 합쳐지지 않는다. 짝이 없으면 단방향 대화다. **대화의 순회 순서는 각 대화가 입력 `List<TcpStream>`에 처음 등장한 순서다** — 결정성은 완료 조건이므로 여기서 못박는다
 3. 대화의 **어느 스트림에서도** `isModbusStream == true`가 아니면 **절단·갭 여부와 무관하게** `skippedConversations`를 올리고 그 대화를 끝낸다(우선순위 표)
-4. 신호 표와 결합 규칙으로 클라이언트 방향을 고른다. **R3(판정 불가)이거나 R4(고른 방향이 캡처에 없음)이면** `Access.UNDECIDABLE` 관찰 **한 건**을 만들고 `undecidableConversations`를 올린 뒤 **그 대화를 여기서 끝낸다.** 끝내지 않으면 6이 이어 돌아 같은 대화에서 관찰 두 건과 이중 계수가 난다 — 단방향 캡처는 대개 SPAN·snaplen 산물이라 절단을 함께 달고 있어 흔한 경우다.
-   이 관찰의 `source`/`target`·`at`은 **그 대화에 잡힌 스트림 중 입력 목록에 먼저 등장한 쪽**의 것을 쓴다(`objectRef`는 `"-"`). R3은 스트림이 둘일 수 있으므로 "잡힌 스트림"만으로는 결정되지 않는다 — 어느 쪽을 쓸지 정하지 않으면 리포트에 찍히는 주소가 구현자 재량이 된다
+4. 신호 표와 결합 규칙으로 클라이언트 방향을 고른다(S3는 각 방향의 프레임 목록에 `ModbusShape.ofStream`을 돌려 얻는다). **R4(판정 불가)이거나 R5(고른 방향이 캡처에 없음)이면** `Access.UNDECIDABLE` 관찰 **한 건**을 만들고 `undecidableConversations`를 올린 뒤 **그 대화를 여기서 끝낸다.** 끝내지 않으면 6이 이어 돌아 같은 대화에서 관찰 두 건과 이중 계수가 난다 — 단방향 캡처는 대개 SPAN·snaplen 산물이라 절단을 함께 달고 있어 흔한 경우다.
+   이 관찰의 `source`/`target`·`at`은 **그 대화에 잡힌 스트림 중 입력 목록에 먼저 등장한 쪽**의 것을 쓴다(`objectRef`는 `"-"`). R4는 스트림이 둘일 수 있으므로 "잡힌 스트림"만으로는 결정되지 않는다 — 어느 쪽을 쓸지 정하지 않으면 리포트에 찍히는 주소가 구현자 재량이 된다
 5. 클라이언트 방향의 각 프레임을 `Observation`으로 만든다 — `at`은 `TcpStream.at`, `source`/`target`은 그 스트림의 4-tuple, `protocol`은 `Protocol.MODBUS_TCP`, `access`는 `ModbusAccess.of(fc)`, `objectRef`는 `ModbusObjectRef.of(fc, pdu)`
 6. **종결.** 5에서 프레임으로 만든 관찰이
    - **하나 이상이면** `decodedConversations`를 올린다. 이어서 클라이언트 방향에 `undecodedBytes > 0`이거나 `hasGap`이거나 `truncated`면 `UNDECIDABLE` 관찰을 **한 건 더** 붙인다(`objectRef`는 `"-"`). **대화 계수는 더 건드리지 않는다** — 이 대화는 이미 '해독'이다
@@ -1918,7 +2085,7 @@ public record ObservationResult(List<Observation> observations,
 - [ ] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test`
-Expected: `decode` 모듈 `Tests run: 57, Failures: 0` (40 + `ModbusObserverTest` 17)
+Expected: `decode` 모듈 `Tests run: 70, Failures: 0` (51 + `ModbusObserverTest` 19)
 
 - [ ] **Step 5: 커밋**
 
@@ -1929,7 +2096,7 @@ git commit -m "feat: 요청만 관찰한다 — 응답을 관찰하면 정상 �
 
 ---
 
-### Task 13: 파이프라인과 CLI
+### Task 14: 파이프라인과 CLI
 
 **Files:**
 - Create: `cli/src/main/java/dev/krillin/huginn/cli/Pipeline.java`
@@ -2019,7 +2186,11 @@ void 미등록_장비의_쓰기를_잡는다() {
 }
 
 @Test
-void 비표준_포트의_우회를_잡는다() { /* 502 가 아닌 포트로 같은 통신 */ }
+void 비표준_포트의_우회를_잡는다() {
+    // 502 가 아닌 포트로 같은 통신. 서버 50502 / 클라 1288 처럼 포트 신호(S2)가
+    // 미성립이거나 거울상인 조합을 쓴다 — 우연히 S2 가 맞는 조합(8502/40000)을 고르면
+    // PDU 형태 신호(S3)가 실제로 일하는지 시험하지 못한다.
+}
 
 @Test
 void 포트가_502여도_프레이밍이_아니면_Modbus로_치지_않는다() { /* §5-① 을 양방향으로 고정 */ }
@@ -2047,7 +2218,7 @@ void 계약이_잘못되면_종료코드_2다() { /* 위반 1 과 구별된다 *
 @Test
 void 위반이_없으면_종료코드_0이다() {
     // 완료 조건의 "0/1/2 계약" 이 자동으로 지켜지게 한다.
-    // Task 14 의 수동 실행에만 맡기면 회귀를 잡지 못한다.
+    // Task 15 의 수동 실행에만 맡기면 회귀를 잡지 못한다.
 }
 
 @Test
@@ -2068,7 +2239,7 @@ Expected: 컴파일 실패
 
 `Pipeline.run`이 커버리지를 직접 집계한다 — `PcapReader`(처리 패킷 수), `FrameDecoder`(대상 외 패킷), `ModbusObserver`(해독·대상 외·UNDECIDABLE **대화**), `Reconciler`(위반, UNDECIDABLE **관찰**). `ReconcileResult`에는 패킷 수를 담을 자리가 없으므로 `Report`가 둘을 합쳐 든다.
 
-`cli/pom.xml`에 shade 플러그인을 붙여 `huginn.jar` 하나로 실행되게 한다. `mainClass`는 `dev.krillin.huginn.cli.Huginn`이고, **`<finalName>huginn</finalName>`을 반드시 함께 준다** — 없으면 산출물이 `huginn-cli-0.1.0-SNAPSHOT.jar`가 되어 Task 14의 `java -jar cli/target/huginn.jar`가 바로 실패하고, 그 태스크가 닫으려던 §10 반증 시험이 또 안 돌아간다.
+`cli/pom.xml`에 shade 플러그인을 붙여 `huginn.jar` 하나로 실행되게 한다. `mainClass`는 `dev.krillin.huginn.cli.Huginn`이고, **`<finalName>huginn</finalName>`을 반드시 함께 준다** — 없으면 산출물이 `huginn-cli-0.1.0-SNAPSHOT.jar`가 되어 Task 14의 `java -jar cli/target/huginn.jar`가 바로 실패하고, 그 태스크(Task 15)가 닫으려던 §10 반증 시험이 또 안 돌아간다.
 
 - [ ] **Step 4: 통과 확인**
 
@@ -2084,7 +2255,7 @@ git commit -m "feat: 파이프라인과 CLI — 리포트는 커버리지를 함
 
 ---
 
-### Task 14: 공개 캡처로 반증 조건을 실제로 시험한다
+### Task 15: 공개 캡처로 반증 조건을 실제로 시험한다
 
 **Files:**
 - Create: `scripts/fetch-samples.sh`, `scripts/fetch-samples.ps1`
@@ -2136,7 +2307,7 @@ git commit -m "test: 공개 ICS 캡처로 반증 조건을 시험한다"
 
 ---
 
-### Task 15: README와 예시
+### Task 16: README와 예시
 
 **Files:**
 - Create: `README.md`
@@ -2186,17 +2357,18 @@ git commit -m "docs: README와 예시 정책"
 ## 완료 조건
 
 - [ ] `mvn test` 전체 통과
-- [ ] **`decode` 밖 어디에도 MBAP·PDU·함수코드를 다루는 코드가 없다** (`Protocol.MODBUS_TCP`라는 *이름*은 정책 계약이 쓰므로 `reconcile`·`contract`에 있는 것이 정상이다)
+- [ ] **`decode` 밖 어디에도 MBAP·PDU·함수코드·PDU 형태를 다루는 코드가 없다** (`Protocol.MODBUS_TCP`라는 *이름*은 정책 계약이 쓰므로 `reconcile`·`contract`에 있는 것이 정상이다)
       Run: `grep -rn "MBAP\|functionCode\|unitId\|protocolId" --include=*.java pcap/src/main contract/src/main reconcile/src/main cli/src/main` → Expected: 히트 0건 (테스트 소스는 제외한다 — 주장은 main 코드에 대한 것이고, `cli` 테스트는 `ModbusFixtures`를 정당하게 쓴다)
 - [ ] `pcap`·`decode`·`reconcile` 모듈에 런타임 서드파티 의존이 없다
       Run: `mvn -pl pcap,decode,reconcile dependency:tree` → Expected: `compile`/`runtime` 스코프에 `com.fasterxml.*`가 없다
-- [ ] **같은 pcap·정책을 두 번 돌리면 같은 리포트 문자열이 나온다** (Task 13 `같은_입력에_같은_리포트가_나온다`) — 결정성은 설계 §8의 시험 전략이자 스트림 열거·대화 순회 규칙의 존재 이유다
+- [ ] **같은 pcap·정책을 두 번 돌리면 같은 리포트 문자열이 나온다** (Task 14 `같은_입력에_같은_리포트가_나온다`) — 결정성은 설계 §8의 시험 전략이자 스트림 열거·대화 순회 규칙의 존재 이유다
 - [ ] 리포트가 커버리지 여섯 수치(처리 패킷·대상 외 패킷·해독한 대화·대상 외 대화·`UNDECIDABLE` 대화·`UNDECIDABLE` 관찰)를 항상 낸다
 - [ ] **대화 계수 셋의 합이 전체 대화 수와 같다** — 어느 대화도 어느 칸에도 안 세이거나 두 번 세이지 않는다
 - [ ] 위반이 든 합성 캡처에서 실제로 잡힌다 — 정상 캡처에서 0건인 것만으로는 증명되지 않는다
 - [ ] **요청과 응답이 모두 든 정상 캡처에서 위반이 0건이다** — 요청/응답 결함의 회귀 가드
 - [ ] **한 방향만 잡힌 캡처가 위반이 아니라 `UNDECIDABLE`로 나온다** — 클라이언트 판정의 회귀 가드
-- [ ] **서버 포트가 클라이언트 포트보다 크거나, 클라이언트가 특권 포트를 바인딩한 양방향 캡처에서도 응답이 요청으로 읽히지 않는다** — 포트 휴리스틱의 거울상 가드. 위 단방향 가드로는 잡히지 않는다(둘 다 양방향이다)
+- [ ] **서버 포트가 클라이언트 포트보다 크거나, 클라이언트가 특권 포트를 바인딩한 양방향 캡처에서 방향이 올바로 판정된다** — 포트 휴리스틱의 거울상 가드. PDU 형태(S3)가 포트를 보지 않고 갈라 준다. 위 단방향 가드로는 잡히지 않는다(둘 다 양방향이다)
+- [ ] **PDU 형태로도 포트로도 못 가리는 대화(FC 5·6·22 에코 + 같은 부류 포트)는 위반이 아니라 `UNDECIDABLE`이다** — S3를 넣었다고 아무거나 단정하지 않는다
 - [ ] **SYN+ACK를 SYN으로 읽지 않는다** — 그러면 서버가 클라이언트로 판정되어 같은 오탐이 다른 경로로 되살아난다
 - [ ] `java -jar cli/target/huginn.jar <capture> <policy>`가 실제로 실행되고 종료 코드가 0/1/2 계약을 지킨다
 - [ ] 공개 ICS 캡처로 설계 §10의 반증 조건을 실제로 시험하고 결과를 기록했다
