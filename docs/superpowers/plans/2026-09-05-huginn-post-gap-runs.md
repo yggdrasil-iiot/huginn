@@ -41,7 +41,7 @@
 
 §5 의 회귀 판정과 §6 의 문서 갱신이 이 값에 걸린다.
 
-- [ ] **Step 1: 시작 지점을 기록한다**
+- [x] **Step 1: 시작 지점을 기록한다**
 
 ```bash
 git rev-parse HEAD > .huginn-runs-base
@@ -51,7 +51,7 @@ echo $BASE
 
 작업이 끝나면 지운다(Task 10).
 
-- [ ] **Step 2: 지금 상태를 초록으로 확인한다**
+- [x] **Step 2: 지금 상태를 초록으로 확인한다**
 
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`, 총 215건(실캡처 4건은 skip)
@@ -69,7 +69,7 @@ Expected: `BUILD SUCCESS`, 총 215건(실캡처 4건은 skip)
 - Modify: `pcap/src/main/java/dev/krillin/huginn/pcap/TcpStreamAssembler.java`
 - Test: `pcap/src/test/java/dev/krillin/huginn/pcap/TcpStreamAssemblerTest.java`
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다 — 구간 분할과 갭 크기**
+- [x] **Step 1: 실패하는 테스트를 쓴다 — 구간 분할과 갭 크기**
 
 `TcpStreamAssemblerTest` 에 세 건을 **새로** 더한다(기존 14건은 Step 3에서 표현만 고친다):
 
@@ -107,12 +107,12 @@ void 데이터가_없는_스트림은_구간이_없다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl pcap -am test | grep -E "Tests run:|ERROR"`
 Expected: 컴파일 실패 — `runs()`·`missingBytes()` 없음
 
-- [ ] **Step 3: `TcpStream` 을 바꾼다**
+- [x] **Step 3: `TcpStream` 을 바꾼다**
 
 ```java
 /**
@@ -140,7 +140,7 @@ public record TcpStream(
 }
 ```
 
-- [ ] **Step 4: 조립기의 `compute()` 를 바꾼다**
+- [x] **Step 4: 조립기의 `compute()` 를 바꾼다**
 
 `Builder` 의 `prefix`·`gap` 필드를 `runs`·`missing` 으로 바꾸고, 갭에서 `break` 하던 것을 **구간을 끊고 계속**하는 것으로 바꾼다:
 
@@ -198,7 +198,7 @@ public record TcpStream(
 
 생성 지점(`assemble` 의 `new TcpStream(...)`)도 새 시그니처에 맞춘다.
 
-- [ ] **Step 5: 기존 14건을 표현만 고친다**
+- [x] **Step 5: 기존 14건을 표현만 고친다**
 
 `contiguousPrefix()` → `runs().get(0)`. **단언 값은 하나도 바뀌지 않아야 한다.** 다만 설계 §6이 미리 승인한 **예외 둘**이 있다:
 
@@ -209,12 +209,12 @@ public record TcpStream(
 
 그 밖의 테스트에서 단언 값을 고쳐야 한다면 **멈추고 원인을 찾는다** — 표현 변경이 아니라 동작 변경을 한 것이다.
 
-- [ ] **Step 6: 통과 확인**
+- [x] **Step 6: 통과 확인**
 
 Run: `mvn -pl pcap -am test | grep -E "Tests run:|BUILD"`
 Expected: `TcpStreamAssemblerTest` `Tests run: 17`(기존 14 + 신규 3), 실패 0
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add pcap/src
@@ -232,7 +232,7 @@ git commit -m "feat: 조립기가 갭 이후 구간과 구멍 크기를 보존�
 
 **아직 갭 이후를 읽지 않는다.** 여섯 호출부를 기계적으로 "첫 구간" 으로 바꿔 215건이 그대로 통과하는 상태를 만든다. 이 중간 상태가 있어야 청크 2의 회귀 원인을 좁힐 수 있다.
 
-- [ ] **Step 1: 여섯 호출부를 첫 구간으로 바꾼다**
+- [x] **Step 1: 여섯 호출부를 첫 구간으로 바꾼다**
 
 ```java
 // 임시 — Task 4 에서 RunReader 로 대체된다.
@@ -241,7 +241,7 @@ byte[] firstRun = stream.runs().isEmpty() ? new byte[0] : stream.runs().get(0);
 
 `ModbusDecoder` 의 `scan`·관찰 루프·`shapeSignal`, `S7Decoder` 의 `scan`·Job 루프·관찰 루프 여섯 곳이다.
 
-- [ ] **Step 2: 테스트 헬퍼의 생성자를 고친다**
+- [x] **Step 2: 테스트 헬퍼의 생성자를 고친다**
 
 **`ModbusObserverTest` 는 헬퍼가 둘이다** — 9인자 전체형(`hasGap` 을 받는다, 호출부 8곳)과 그것에 위임하는 5인자 축약형. **전체형의 `hasGap` 파라미터를 없애지 말고 안에서 번역한다.** 없애면 호출부 8곳이 전부 바뀌어 Step 3의 가드가 헛발동한다:
 
@@ -275,7 +275,7 @@ byte[] firstRun = stream.runs().isEmpty() ? new byte[0] : stream.runs().get(0);
 > Task 2 시점에는 `hasGap()` 방아쇠로, Task 5 이후에는 그것과 `unreadBytes > 0` 둘 다로
 > 원래 단언(관찰 2건)이 성립한다.
 
-- [ ] **Step 3: 통과 확인**
+- [x] **Step 3: 통과 확인**
 
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`, **218건**(Task 1 이 조립기 테스트 3건을 더했다). **단언 값은 하나도 바뀌지 않았다.**
@@ -283,7 +283,7 @@ Expected: `BUILD SUCCESS`, **218건**(Task 1 이 조립기 테스트 3건을 더
 Run: `git diff HEAD --stat -- decode/src/test cli/src/test`
 Expected: 세 테스트 파일의 헬퍼만 바뀐다. 다른 테스트가 바뀌었다면 멈춘다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add decode/src
@@ -300,7 +300,7 @@ git commit -m "refactor: 호출부를 첫 구간으로 맞춘다 — 동작 변�
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/Framing.java`
 - Modify: `decode/src/main/java/dev/krillin/huginn/decode/FramingResult.java` · `S7FramingResult.java`
 
-- [ ] **Step 1: 인터페이스와 구현**
+- [x] **Step 1: 인터페이스와 구현**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -327,12 +327,12 @@ public record FramingResult(List<ModbusFrame> frames, int undecodedBytes, boolea
 
 `S7FramingResult` 도 같은 방식으로(`frames.size()` · `undecodedBytes`).
 
-- [ ] **Step 2: 컴파일 확인**
+- [x] **Step 2: 컴파일 확인**
 
 Run: `mvn -pl decode -am test-compile`
 Expected: 성공
 
-- [ ] **Step 3: 커밋**
+- [x] **Step 3: 커밋**
 
 ```bash
 git add decode/src/main
@@ -347,7 +347,7 @@ git commit -m "feat: 두 프레이밍 결과의 최소 공통 계약"
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/RunReader.java`
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/RunReaderTest.java`
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 ```java
 class RunReaderTest {
@@ -434,12 +434,12 @@ class RunReaderTest {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl decode -am test | grep -cE "ERROR.*cannot find symbol"`
 Expected: 0 이 아닌 수
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -521,12 +521,12 @@ final class RunReader {
 
 > **비용을 정직하게 적는다.** 설계 §3 은 "재프레이밍 비용도 줄어든다"고 했지만 이 계획은 그것을 실현하지 않는다 — `ModbusDecoder` 가 대화마다 `RunReader.read` 를 세 번(스캔·`shapeSignal`·관찰 루프), `S7Decoder` 는 `fragmented` 판정까지 네 번 돈다. 지금보다 나빠지지는 않지만 나아지지도 않는다. 문제가 되면 그때 측정해서 다룬다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test | grep -E "RunReaderTest|BUILD"`
 Expected: `Tests run: 6, Failures: 0`
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -542,7 +542,7 @@ git commit -m "feat: 엄격 적합 수용 — 경계를 찾지 않으므로 재�
 - Modify: `decode/src/main/java/dev/krillin/huginn/decode/ModbusDecoder.java` · `S7Decoder.java`
 - Modify: `decode/src/main/java/dev/krillin/huginn/decode/TrafficObserver.java` — **꼬리 방아쇠 한 줄.** `leftoverBytes()` 의 유일한 소비자라 여기를 안 고치면 모듈이 컴파일되지 않는다
 
-- [ ] **Step 1: `StreamEvidence` 를 바꾼다**
+- [x] **Step 1: `StreamEvidence` 를 바꾼다**
 
 ```java
 /**
@@ -558,7 +558,7 @@ record StreamEvidence(TcpStream stream, int frameCount, long unreadBytes, long c
 }
 ```
 
-- [ ] **Step 2: `ModbusDecoder` 의 세 곳을 바꾼다**
+- [x] **Step 2: `ModbusDecoder` 의 세 곳을 바꾼다**
 
 `scan` 은 `RunReader` 로 증거를 만들고, 관찰 루프와 `shapeSignal` 은 **수용된 구간들의 프레임을 이어 붙인 목록**을 본다:
 
@@ -584,7 +584,7 @@ record StreamEvidence(TcpStream stream, int frameCount, long unreadBytes, long c
 
 > **왜 이어 붙이나.** 두 구간의 형태가 어긋나면 합쳐서 `UNKNOWN` 이 되고, 그것은 판정 불가 쪽으로 기우는 보수적 방향이라 이 설계의 원칙과 맞다(설계 §3).
 
-- [ ] **Step 2b: `TrafficObserver` 의 꼬리 방아쇠를 고친다**
+- [x] **Step 2b: `TrafficObserver` 의 꼬리 방아쇠를 고친다**
 
 ```java
             if (client.unreadBytes() > 0 || client.stream().hasGap()
@@ -593,7 +593,7 @@ record StreamEvidence(TcpStream stream, int frameCount, long unreadBytes, long c
 
 `hasGap()` 은 **반드시 남긴다** — 갭이 있는데 모든 구간이 수용되어 `unreadBytes == 0` 인 스트림이 실캡처에 실제로 있다(설계 §1·§3).
 
-- [ ] **Step 3: `S7Decoder` 의 세 곳을 바꾼다**
+- [x] **Step 3: `S7Decoder` 의 세 곳을 바꾼다**
 
 같은 방식이다. Job 루프의 `unread |= framing.fragmented()` 는 **거부된 구간의 분할도 포함**한다(설계 §3) — `RunReader.Reading` 은 수용된 것만 주므로, `fragmented` 는 구간 전체를 다시 훑어 판정한다:
 
@@ -604,14 +604,14 @@ record StreamEvidence(TcpStream stream, int frameCount, long unreadBytes, long c
         }
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn test | grep -E "Tests run:|BUILD|FAIL"`
 Expected: `BUILD SUCCESS`. **`ModbusObserverTest.갭이_있는_스트림은…` 이 여기서 진짜 시험된다** — 둘째 구간의 쓰레기가 거부되어 `unreadBytes > 0` 이 되고 원래 단언이 성립해야 한다.
 
 `RealCaptureTest` 는 아직 옛 기대값이라 실캡처를 물리면 실패한다. Task 8에서 다시 잡는다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -626,7 +626,7 @@ git commit -m "feat: 여섯 호출부가 같은 수용 규칙을 쓴다"
 - Modify: `decode/src/main/java/dev/krillin/huginn/decode/ObservationResult.java` · `Diagnosed.java` · `TrafficObserver.java`
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/CoexistenceTest.java` (새 테스트 한 건)
 
-- [ ] **Step 1: 실패하는 테스트를 쓴다**
+- [x] **Step 1: 실패하는 테스트를 쓴다**
 
 ```java
 @Test
@@ -645,9 +645,9 @@ void 산업_대화의_못_본_바이트를_센다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인** → `unobservedBytes` 없음
+- [x] **Step 2: 실패 확인** → `unobservedBytes` 없음
 
-- [ ] **Step 3: 필드를 더한다**
+- [x] **Step 3: 필드를 더한다**
 
 ```java
 /**
@@ -663,7 +663,7 @@ public record ObservationResult(List<Observation> observations,
 
 `Diagnosed` 에는 `rejectedRuns`·`dirtyRuns` 를 더한다.
 
-- [ ] **Step 4: 순회기에서 누적한다**
+- [x] **Step 4: 순회기에서 누적한다**
 
 대상 외로 빠져나가는 `continue` **뒤에서** 센다 — 배제가 규칙이 아니라 구조로 지켜진다:
 
@@ -677,12 +677,12 @@ public record ObservationResult(List<Observation> observations,
 
 **진단 집계의 모집단을 못박는다** — `rejectedRuns`·`dirtyRuns` 는 **산업 대화**(대상 외로 빠지지 않은 대화)의 **이긴 해독기 증거**에 대해서만 더한다. 대상 외 대화는 어차피 `continue` 로 먼저 빠지고, 진 해독기의 증거까지 세면 같은 구간이 두 번 세인다. Task 8 이 단언하는 `dirtyRuns == 0` 은 이 모집단 위의 값이다.
 
-- [ ] **Step 5: 통과 확인**
+- [x] **Step 5: 통과 확인**
 
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add decode/src
@@ -699,7 +699,7 @@ git commit -m "feat: 산업 대화의 못 본 바이트를 센다"
 - Modify: `cli/src/main/java/dev/krillin/huginn/cli/Report.java` · `Pipeline.java`
 - Test: `cli/src/test/java/dev/krillin/huginn/cli/EndToEndTest.java` (새 테스트 한 건)
 
-- [ ] **Step 1: 실패하는 테스트**
+- [x] **Step 1: 실패하는 테스트**
 
 ```java
 @Test
@@ -712,9 +712,9 @@ void 리포트는_못_본_바이트를_비율과_함께_낸다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인** → 그 줄이 없다
+- [x] **Step 2: 실패 확인** → 그 줄이 없다
 
-- [ ] **Step 3: `Report` 를 바꾼다**
+- [x] **Step 3: `Report` 를 바꾼다**
 
 컴포넌트 둘을 더하고 비율 판을 새로 만든다. 기존 `count(String, int)` 는 **그대로 둔다** — 여섯 줄은 여전히 `int` 이고 새 줄만 `long` 을 받는다:
 
@@ -732,12 +732,12 @@ void 리포트는_못_본_바이트를_비율과_함께_낸다() {
 
 `render()` 의 여섯 줄 뒤에 `countWithRatio("미관측 바이트", unobservedBytes, industrialBytes)` 를 더한다. `Pipeline` 은 새 필드를 넘긴다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`, `cli` 12건
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add cli/src
@@ -753,7 +753,7 @@ git commit -m "feat: 리포트가 못 본 바이트를 낸다"
 
 **이 설계가 깨뜨리려고 만든 테스트다.** 옛 기대값 `21 / 52,607 / 34,154` 는 "첫 갭까지만 읽는다" 는 정책의 산물이었다.
 
-- [ ] **Step 1: 새 수치를 측정한다**
+- [x] **Step 1: 새 수치를 측정한다**
 
 ```powershell
 $env:HUGINN_SAMPLES = "C:/path/to/huginn/samples"   # 절대 경로 — surefire 작업 디렉터리는 모듈 basedir 다
@@ -766,7 +766,7 @@ mvn -pl decode -am test -Dtest=RealCaptureTest -Dsurefire.failIfNoSpecifiedTests
 
 **`missingBytes` 가 그럴듯한지도 본다.** seq 랩어라운드가 있는 스트림은 raw 32비트 정렬 때문에 구멍 하나가 약 40억으로 잡히고 그 값이 리포트 비율에 그대로 흘러든다 — 예전에는 boolean 이라 보이지 않던 결함이다. 캡처 크기를 훌쩍 넘는 값이 나오면 기록에 남기고 원인을 적는다.
 
-- [ ] **Step 2: 테스트를 다시 쓴다**
+- [x] **Step 2: 테스트를 다시 쓴다**
 
 - 이름을 `S7_프레임_관찰_수는_첫_갭까지의_커버리지와_같다` → `S7_프레임_관찰_수가_tshark_Job_수에_근접한다` 로
 - 15줄 주석을 새 정책으로 교체(옛 커버리지 설명은 이제 틀렸다)
@@ -775,12 +775,12 @@ mvn -pl decode -am test -Dtest=RealCaptureTest -Dsurefire.failIfNoSpecifiedTests
 - `dirtyRuns == 0` 과 `rejectedRuns` 기록을 단언·출력으로 추가
 - **Modbus 기준선**(해독 56 · 대상 외 932,655 · UNDECIDABLE 대화 24 · 관찰 48 · 총 49,767)이 움직이면 새 값으로 잡고 **왜 움직였는지 주석에 적는다**
 
-- [ ] **Step 3: 통과 확인**
+- [x] **Step 3: 통과 확인**
 
 Run: 위 명령
 Expected: 4건 통과
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add decode/src/test
@@ -796,7 +796,7 @@ git commit -m "test: 갭 이후를 읽는 정책의 실캡처 수치를 다시 �
 - Modify: `docs/superpowers/specs/2026-09-05-huginn-design.md` (§5-③ · §10)
 - Modify: `docs/superpowers/specs/2026-09-05-huginn-s7comm-design.md` (§9 판정표)
 
-- [ ] **Step 1: CLI 를 다시 돌려 결과표를 얻는다**
+- [x] **Step 1: CLI 를 다시 돌려 결과표를 얻는다**
 
 ```bash
 mvn -q -DskipTests package
@@ -807,14 +807,14 @@ for f in 151020 151021 151022; do
 done
 ```
 
-- [ ] **Step 2: `samples/README.md` 를 갱신한다**
+- [x] **Step 2: `samples/README.md` 를 갱신한다**
 
 - 결과표에 **미관측 바이트 열** 추가, 여섯 수치 재기록
 - §④ 를 다시 쓴다 — 발견을 지우지 않고 **"발견 → 해소" 로 잇는다.** 무엇을 얼마나 되찾았는지, 남은 손실은 무엇인지
 - **인용 정정**: *"소수점 둘째 자리까지 일치"* → 설계 §1 의 정확한 표현으로(151020 은 0.01% 대 0.09% 로 9배 차이다)
 - 아직 검증되지 않은 것 목록 갱신
 
-- [ ] **Step 3: 원칙을 적어둔 문서를 갱신한다**
+- [x] **Step 3: 원칙을 적어둔 문서를 갱신한다**
 
 | 문서 | 고칠 것 |
 |---|---|
@@ -826,7 +826,7 @@ done
 | 2차 §9 판정표 | "커버리지와 소수점 둘째 자리까지 일치" 문장 정정 |
 | 2차 설계 §6(계수와 리포트) | *"`Report` 의 여섯 줄도 그대로다"* 가 Task 7 이후 거짓이 된다 |
 
-- [ ] **Step 4: 전체 검증**
+- [x] **Step 4: 전체 검증**
 
 ```bash
 rm .huginn-runs-base
@@ -835,7 +835,7 @@ rm .huginn-runs-base
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`
 
-- [ ] **Step 5: 커밋하고 워킹트리를 확인한다**
+- [x] **Step 5: 커밋하고 워킹트리를 확인한다**
 
 ```bash
 git add -A
@@ -849,15 +849,15 @@ Expected: 워킹트리 깨끗 — **커밋 뒤에 본다.** Step 2~3 이 문서�
 
 ## 완료 조건
 
-- [ ] `mvn test` 전체 통과
-- [ ] **갭 없는 스트림만으로 이뤄진 대화의 판정이 하나도 움직이지 않았다** — `ModbusObserverTest` 20건과 `cli` 기존 11건의 단언 값이 그대로다(헬퍼 시그니처 변경은 표현)
-- [ ] `pcap` 14건이 표현만 바뀌었다 — **명시된 예외 둘** 외에 단언 값이 바뀌지 않았다
-- [ ] **`dirtyRuns` 가 세 캡처 모두 0 이다** — 설계 §7 의 첫 반증 조건
-- [ ] **대상 외 대화 수가 크게 줄지 않았다**(`932,647 / 112,730 / 7,288` 기준) — 줄었다면 비산업 트래픽이 엄격 적합을 통과한 것이고, 그것이 오탐이다
-- [ ] S7 관찰 수가 tshark Job 수에 근접하고, **남은 차이를 원인별로 설명했다**
-- [ ] Modbus 기준선이 움직였다면 **왜 움직였는지 적었다**
-- [ ] 리포트가 일곱 줄이고 미관측 바이트가 비율과 함께 나온다
-- [ ] `ModbusFramer`·`S7Framer`·`ModbusShape` 가 한 줄도 바뀌지 않았다
+- [x] `mvn test` 전체 통과
+- [x] **갭 없는 스트림만으로 이뤄진 대화의 판정이 하나도 움직이지 않았다** — `ModbusObserverTest` 20건과 `cli` 기존 11건의 단언 값이 그대로다(헬퍼 시그니처 변경은 표현)
+- [x] `pcap` 14건이 표현만 바뀌었다 — **명시된 예외 둘** 외에 단언 값이 바뀌지 않았다
+- [x] **`dirtyRuns` 가 세 캡처 모두 0 이다** — 설계 §7 의 첫 반증 조건
+- [x] **대상 외 대화 수가 크게 줄지 않았다**(`932,647 / 112,730 / 7,288` 기준) — 줄었다면 비산업 트래픽이 엄격 적합을 통과한 것이고, 그것이 오탐이다
+- [x] S7 관찰 수가 tshark Job 수에 근접하고, **남은 차이를 원인별로 설명했다**
+- [x] Modbus 기준선이 움직였다면 **왜 움직였는지 적었다**
+- [x] 리포트가 일곱 줄이고 미관측 바이트가 비율과 함께 나온다
+- [x] `ModbusFramer`·`S7Framer`·`ModbusShape` 가 한 줄도 바뀌지 않았다
       Run: `git diff --stat $BASE..HEAD -- decode/src/main/java/dev/krillin/huginn/decode/ModbusFramer.java decode/src/main/java/dev/krillin/huginn/decode/S7Framer.java decode/src/main/java/dev/krillin/huginn/decode/ModbusShape.java` → Expected: 빈 출력
-- [ ] 옛 정책을 원칙으로 적어둔 문서 **일곱 곳**이 전부 갱신됐다
-- [ ] **인용 오류가 세 문서에서 정정됐다** — "소수점 둘째 자리까지 일치"
+- [x] 옛 정책을 원칙으로 적어둔 문서 **일곱 곳**이 전부 갱신됐다
+- [x] **인용 오류가 세 문서에서 정정됐다** — "소수점 둘째 자리까지 일치"
