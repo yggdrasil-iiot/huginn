@@ -8,6 +8,9 @@
 
 **Tech Stack:** Java 17 · Maven 멀티모듈 · JUnit 5 · tshark 4.6.8(검증 오라클) · 4SICS 실캡처 3개
 
+> **셸.** 아래 명령은 Git Bash 기준이다(`grep`·`for f in …`). PowerShell 로 돌릴 때는 Task 0·8 에 적어둔 대응 형태를 쓴다.
+> **import.** 스니펫은 본문만 적었다 — 새 테스트는 `US_ASCII`·`java.util.List`·`java.time.Instant` 가 필요하고 `TcpStream` 은 `java.util.List` 를 새로 import 한다.
+
 **설계 문서:** [2026-09-05-huginn-post-gap-runs-design.md](../specs/2026-09-05-huginn-post-gap-runs-design.md) (rev3, 승인)
 
 ---
@@ -68,7 +71,7 @@ Expected: `BUILD SUCCESS`, 총 215건(실캡처 4건은 skip)
 
 - [ ] **Step 1: 실패하는 테스트를 쓴다 — 구간 분할과 갭 크기**
 
-`TcpStreamAssemblerTest` 에 두 건을 **새로** 더한다(기존 14건은 Step 3에서 표현만 고친다):
+`TcpStreamAssemblerTest` 에 세 건을 **새로** 더한다(기존 14건은 Step 3에서 표현만 고친다):
 
 ```java
 @Test
@@ -120,6 +123,9 @@ Expected: 컴파일 실패 — `runs()`·`missingBytes()` 없음
  *             <b>주의:</b> {@code byte[]} 를 담으므로 record 의 {@code equals} 는 여전히 참조 비교다.
  * @param missingBytes 구간 사이 구멍들의 크기 합. 캡처가 받지 못한 바이트이며,
  *             "받았지만 해독 못 한" 것과는 다른 값이다(설계 §4)
+ * @param at         이 방향에서 관찰된 세그먼트 중 <b>가장 이른 at</b>. 입력 순서가 아니라 시각이
+ *                   기준이다 — 입력 순서상 첫 번째로 읽으면 순서가 뒤바뀐 캡처에서 리포트의
+ *                   시각이 뒤집힌다(기존 javadoc 을 그대로 유지한다)
  * @param truncated  이 방향의 세그먼트 중 하나라도 절단됐으면 true
  * @param sawSynOnly 이 방향에서 SYN 은 서 있고 ACK 는 서 있지 않은 세그먼트를 봤다
  */
@@ -184,8 +190,11 @@ public record TcpStream(
             if (out.size() > 0) {
                 runs.add(out.toByteArray());
             }
+            runs = List.copyOf(runs);      // record 에 살아 있는 ArrayList 를 넘기지 않는다
         }
 ```
+
+`TcpStream` 은 `java.util.List` import 가 필요하다.
 
 생성 지점(`assemble` 의 `new TcpStream(...)`)도 새 시그니처에 맞춘다.
 
@@ -234,7 +243,20 @@ byte[] firstRun = stream.runs().isEmpty() ? new byte[0] : stream.runs().get(0);
 
 - [ ] **Step 2: 테스트 헬퍼의 생성자를 고친다**
 
-세 파일의 `stream(...)` 헬퍼가 `new TcpStream(at, src, sport, dst, dport, bytes, hasGap, truncated, sawSynOnly)` 를 부른다. 새 시그니처로 바꾼다:
+**`ModbusObserverTest` 는 헬퍼가 둘이다** — 9인자 전체형(`hasGap` 을 받는다, 호출부 8곳)과 그것에 위임하는 5인자 축약형. **전체형의 `hasGap` 파라미터를 없애지 말고 안에서 번역한다.** 없애면 호출부 8곳이 전부 바뀌어 Step 3의 가드가 헛발동한다:
+
+```java
+    private static TcpStream stream(String src, int sport, String dst, int dport, byte[] bytes,
+                                    Instant at, boolean sawSynOnly, boolean hasGap, boolean truncated) {
+        // hasGap 을 구간 목록으로 번역한다 — 둘째 구간은 프레임이 되지 않는 바이트다.
+        List<byte[]> runs = hasGap
+            ? List.of(bytes, "쓰레기".getBytes(StandardCharsets.UTF_8))
+            : List.of(bytes);
+        return new TcpStream(at, src, sport, dst, dport, runs, hasGap ? 100 : 0, truncated, sawSynOnly);
+    }
+```
+
+`CoexistenceTest`·`S7DecoderTest` 는 `hasGap` 을 받지 않는 5인자 형태라 아래처럼 단순하다:
 
 ```java
     private static TcpStream stream(String src, int sport, String dst, int dport, byte[] bytes) {
@@ -246,17 +268,17 @@ byte[] firstRun = stream.runs().isEmpty() ? new byte[0] : stream.runs().get(0);
 **`ModbusObserverTest` 의 갭 픽스처는 예외다.** 지금 `hasGap = true` 를 배열 하나로 주는데, `hasGap()` 이 `runs.size() > 1` 로 유도되므로 표현이 불가능하다. **둘째 구간에 쓰레기 바이트를 준다** — 청크 2에서 거부되어 `unreadBytes > 0` 이 되고 원래 단언이 그대로 성립한다:
 
 ```java
-    // 갭이 있는 스트림 — 둘째 구간은 프레임이 되지 않는 바이트다(청크 2에서 거부된다).
-    private static TcpStream gappedStream(String src, int sport, String dst, int dport, byte[] bytes) {
-        return new TcpStream(Instant.EPOCH, src, sport, dst, dport,
-            List.of(bytes, "쓰레기".getBytes(UTF_8)), 100, false, false);
-    }
 ```
+
+> **`ModbusObserverTest.갭이_있는_스트림은…` 이 이 번역의 시험대다.** 둘째 구간의 `"쓰레기"` 는
+> UTF-8 9바이트이고 `ModbusFramer` 가 `protocolId != 0` 에서 멈춰 프레임 0 · 잔여 9 가 된다.
+> Task 2 시점에는 `hasGap()` 방아쇠로, Task 5 이후에는 그것과 `unreadBytes > 0` 둘 다로
+> 원래 단언(관찰 2건)이 성립한다.
 
 - [ ] **Step 3: 통과 확인**
 
 Run: `mvn test | grep -E "Tests run:|BUILD"`
-Expected: `BUILD SUCCESS`, 215건 그대로. **단언 값이 하나도 바뀌지 않았다.**
+Expected: `BUILD SUCCESS`, **218건**(Task 1 이 조립기 테스트 3건을 더했다). **단언 값은 하나도 바뀌지 않았다.**
 
 Run: `git diff HEAD --stat -- decode/src/test cli/src/test`
 Expected: 세 테스트 파일의 헬퍼만 바뀐다. 다른 테스트가 바뀌었다면 멈춘다.
@@ -497,6 +519,8 @@ final class RunReader {
 }
 ```
 
+> **비용을 정직하게 적는다.** 설계 §3 은 "재프레이밍 비용도 줄어든다"고 했지만 이 계획은 그것을 실현하지 않는다 — `ModbusDecoder` 가 대화마다 `RunReader.read` 를 세 번(스캔·`shapeSignal`·관찰 루프), `S7Decoder` 는 `fragmented` 판정까지 네 번 돈다. 지금보다 나빠지지는 않지만 나아지지도 않는다. 문제가 되면 그때 측정해서 다룬다.
+
 - [ ] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test | grep -E "RunReaderTest|BUILD"`
@@ -516,6 +540,7 @@ git commit -m "feat: 엄격 적합 수용 — 경계를 찾지 않으므로 재�
 **Files:**
 - Modify: `decode/src/main/java/dev/krillin/huginn/decode/StreamEvidence.java`
 - Modify: `decode/src/main/java/dev/krillin/huginn/decode/ModbusDecoder.java` · `S7Decoder.java`
+- Modify: `decode/src/main/java/dev/krillin/huginn/decode/TrafficObserver.java` — **꼬리 방아쇠 한 줄.** `leftoverBytes()` 의 유일한 소비자라 여기를 안 고치면 모듈이 컴파일되지 않는다
 
 - [ ] **Step 1: `StreamEvidence` 를 바꾼다**
 
@@ -524,8 +549,12 @@ git commit -m "feat: 엄격 적합 수용 — 경계를 찾지 않으므로 재�
  * @param frameCount    수용된 구간들에서 나온 프레임 수. 0 이면 이 스트림은 이 프로토콜이 아니다
  * @param unreadBytes   받았지만 프레임이 덮지 못한 바이트(설계 §3 의 구간별 계산표)
  * @param capturedBytes 이 스트림에서 실제로 받은 바이트. 구멍은 {@code stream.missingBytes()} 가 센다
+ * @param rejectedRuns  거부한 구간 수 · @param dirtyRuns 그중 프레임이 나왔던 구간 수.
+ *                      <b>진단 전용</b>이며 판정에 쓰지 않는다 — RunReader 를 한 번 더 돌리지 않으려고
+ *                      여기 실어 나른다. 설계 §7 의 반증 조건이 이 값으로 측정된다
  */
-record StreamEvidence(TcpStream stream, int frameCount, long unreadBytes, long capturedBytes) {
+record StreamEvidence(TcpStream stream, int frameCount, long unreadBytes, long capturedBytes,
+                      int rejectedRuns, int dirtyRuns) {
 }
 ```
 
@@ -554,6 +583,15 @@ record StreamEvidence(TcpStream stream, int frameCount, long unreadBytes, long c
 `shapeSignal` 은 `ModbusShape.ofStream(framesOf(RunReader.read(...)))` 를, 관찰 루프는 같은 목록을 돈다.
 
 > **왜 이어 붙이나.** 두 구간의 형태가 어긋나면 합쳐서 `UNKNOWN` 이 되고, 그것은 판정 불가 쪽으로 기우는 보수적 방향이라 이 설계의 원칙과 맞다(설계 §3).
+
+- [ ] **Step 2b: `TrafficObserver` 의 꼬리 방아쇠를 고친다**
+
+```java
+            if (client.unreadBytes() > 0 || client.stream().hasGap()
+                || client.stream().truncated() || result.tailUndecidable()) {
+```
+
+`hasGap()` 은 **반드시 남긴다** — 갭이 있는데 모든 구간이 수용되어 `unreadBytes == 0` 인 스트림이 실캡처에 실제로 있다(설계 §1·§3).
 
 - [ ] **Step 3: `S7Decoder` 의 세 곳을 바꾼다**
 
@@ -596,14 +634,14 @@ void 산업_대화의_못_본_바이트를_센다() {
     // 분자 = 미해독 + 구멍, 분모 = 받은 것 + 구멍. 대상 외 대화는 양쪽 어디에도 안 든다.
     byte[] frame = ModbusFixtures.mbap(1, 1, 3, ModbusFixtures.pdu(0, 2));
     TcpStream gapped = new TcpStream(Instant.EPOCH, "10.0.1.20", 40000, "10.0.2.11", 502,
-        List.of(frame), 500, false, false);          // 구멍 500 바이트
+        List.of(frame, frame), 500, false, false);   // 구간 둘 사이에 구멍 500 바이트
     TcpStream ssh = stream("10.0.1.20", 40002, "10.0.3.5", 22,
         "SSH-2.0-OpenSSH_9.0\r\n".getBytes(US_ASCII));
 
     ObservationResult r = TrafficObserver.observe(List.of(gapped, ssh));
 
-    assertEquals(500, r.unobservedBytes(), "구멍은 못 본 바이트다");
-    assertEquals(frame.length + 500, r.industrialBytes(), "SSH 대화는 분모에도 안 든다");
+    assertEquals(500, r.unobservedBytes(), "구멍은 못 본 바이트다 — 둘째 구간은 깨끗해서 수용된다");
+    assertEquals(frame.length * 2L + 500, r.industrialBytes(), "SSH 대화는 분모에도 안 든다");
 }
 ```
 
@@ -637,7 +675,7 @@ public record ObservationResult(List<Observation> observations,
             }
 ```
 
-`rejectedRuns`·`dirtyRuns` 는 이긴 해독기의 `scan` 이 이미 센 값을 쓰려면 `StreamEvidence` 에 실어야 하므로, **진단 전용으로 `RunReader` 를 한 번 더 돌리지 말고** `StreamEvidence` 에 두 필드를 더해 나른다.
+**진단 집계의 모집단을 못박는다** — `rejectedRuns`·`dirtyRuns` 는 **산업 대화**(대상 외로 빠지지 않은 대화)의 **이긴 해독기 증거**에 대해서만 더한다. 대상 외 대화는 어차피 `continue` 로 먼저 빠지고, 진 해독기의 증거까지 세면 같은 구간이 두 번 세인다. Task 8 이 단언하는 `dirtyRuns == 0` 은 이 모집단 위의 값이다.
 
 - [ ] **Step 5: 통과 확인**
 
@@ -678,15 +716,17 @@ void 리포트는_못_본_바이트를_비율과_함께_낸다() {
 
 - [ ] **Step 3: `Report` 를 바꾼다**
 
-컴포넌트 둘을 더하고, `count(String, int)` 를 `long` 도 받게 확장하고, 비율 판을 새로 만든다:
+컴포넌트 둘을 더하고 비율 판을 새로 만든다. 기존 `count(String, int)` 는 **그대로 둔다** — 여섯 줄은 여전히 `int` 이고 새 줄만 `long` 을 받는다:
 
 ```java
     /** 비율은 소수 한 자리다 — 정수로 자르면 0.4% 가 0% 가 되어 실제 손실을 숨긴다. */
     private static String countWithRatio(String label, long value, long total) {
-        String amount = String.format(Locale.ROOT, "%,d (%.1f%%)",
-            value, total == 0 ? 0.0 : 100.0 * value / total);
         int padding = Math.max(1, LABEL_WIDTH - displayWidth(label));
-        return "  " + label + " ".repeat(padding) + String.format(Locale.ROOT, "%16s", amount) + "\n";
+        String ratio = String.format(Locale.ROOT, " (%.1f%%)",
+            total == 0 ? 0.0 : 100.0 * value / total);
+        // 숫자 부분만 %8s 로 오른쪽 정렬해 위 여섯 줄과 같은 열에서 끝나게 한다.
+        // 전체를 %16s 로 밀면 일곱째 줄의 숫자가 위 여섯 줄이 끝나는 자리에서 시작해 표가 깨진다.
+        return "  " + label + " ".repeat(padding) + String.format(Locale.ROOT, "%8s", String.format(Locale.ROOT, "%,d", value)) + ratio + "\n";
     }
 ```
 
@@ -720,13 +760,18 @@ $env:HUGINN_SAMPLES = "C:/path/to/huginn/samples"   # 절대 경로 — surefire
 mvn -pl decode -am test -Dtest=RealCaptureTest -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
-`수치를_기록한다` 가 찍는 값을 받아 적는다. **`dirtyRuns` 가 0 인지 먼저 본다** — 0 이 아니면 설계 §7 의 반증 조건이 발동한 것이고, 수치를 적기 전에 그것부터 다룬다.
+**먼저 `수치를_기록한다` 가 진단을 찍게 고친다.** 지금은 `s7Only()` 가 `ObservationResult` 를 돌려주므로 `dirtyRuns` 를 볼 방법이 없다 — `TrafficObserver.observeWithDiagnostics(streamsOf(capture), List.of(new S7Decoder()))` 로 바꾸고 `rejectedRuns`·`dirtyRuns`·`unobservedBytes`·`industrialBytes` 를 함께 찍는다. 그 다음에 돌린다.
+
+**`dirtyRuns` 가 0 인지 먼저 본다** — 0 이 아니면 설계 §7 의 반증 조건이 발동한 것이고, 수치를 적기 전에 그것부터 다룬다.
+
+**`missingBytes` 가 그럴듯한지도 본다.** seq 랩어라운드가 있는 스트림은 raw 32비트 정렬 때문에 구멍 하나가 약 40억으로 잡히고 그 값이 리포트 비율에 그대로 흘러든다 — 예전에는 boolean 이라 보이지 않던 결함이다. 캡처 크기를 훌쩍 넘는 값이 나오면 기록에 남기고 원인을 적는다.
 
 - [ ] **Step 2: 테스트를 다시 쓴다**
 
 - 이름을 `S7_프레임_관찰_수는_첫_갭까지의_커버리지와_같다` → `S7_프레임_관찰_수가_tshark_Job_수에_근접한다` 로
 - 15줄 주석을 새 정책으로 교체(옛 커버리지 설명은 이제 틀렸다)
 - 기대값을 측정값으로. **tshark Job 수(23,732 / 86,403 / 53,217)와의 남은 차이는 반드시 설명한다** — 남는 원인은 양방향 요청 대화와 거부된 구간뿐이다
+- **단위를 혼동하지 않는다.** 설계 §1 의 프로토타입 표(47,422 등)는 **양방향·모든 ROSCTR** 을 센다. Huginn 의 관찰은 클라이언트 방향의 ROSCTR 1 뿐이라 151020 의 기대 증가는 **약 23,700** 이다. 47,422 를 기대하면 정상 구현을 2배 미달로 오해한다
 - `dirtyRuns == 0` 과 `rejectedRuns` 기록을 단언·출력으로 추가
 - **Modbus 기준선**(해독 56 · 대상 외 932,655 · UNDECIDABLE 대화 24 · 관찰 48 · 총 49,767)이 움직이면 새 값으로 잡고 **왜 움직였는지 주석에 적는다**
 
@@ -779,6 +824,7 @@ done
 | 1차 §5-③ | *"그 지점부터 `UNDECIDABLE`"* → 이어붙이지 않고 **따로 읽는다** 로 갱신. 원칙(이어붙이지 않는다)은 유지 |
 | 1차 §10 | 인용 정정 + 이 작업으로 한계가 해소됐음을 추가 |
 | 2차 §9 판정표 | "커버리지와 소수점 둘째 자리까지 일치" 문장 정정 |
+| 2차 설계 §6(계수와 리포트) | *"`Report` 의 여섯 줄도 그대로다"* 가 Task 7 이후 거짓이 된다 |
 
 - [ ] **Step 4: 전체 검증**
 
@@ -789,15 +835,15 @@ rm .huginn-runs-base
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`
 
-Run: `git status -sb`
-Expected: 워킹트리 깨끗
-
-- [ ] **Step 5: 커밋**
+- [ ] **Step 5: 커밋하고 워킹트리를 확인한다**
 
 ```bash
 git add -A
 git commit -m "docs: 갭 이후 구간 처리 결과와 인용 정정"
 ```
+
+Run: `git status -sb`
+Expected: 워킹트리 깨끗 — **커밋 뒤에 본다.** Step 2~3 이 문서를 다섯 개 고치므로 커밋 전에는 깨끗할 수 없다
 
 ---
 
@@ -813,5 +859,5 @@ git commit -m "docs: 갭 이후 구간 처리 결과와 인용 정정"
 - [ ] 리포트가 일곱 줄이고 미관측 바이트가 비율과 함께 나온다
 - [ ] `ModbusFramer`·`S7Framer`·`ModbusShape` 가 한 줄도 바뀌지 않았다
       Run: `git diff --stat $BASE..HEAD -- decode/src/main/java/dev/krillin/huginn/decode/ModbusFramer.java decode/src/main/java/dev/krillin/huginn/decode/S7Framer.java decode/src/main/java/dev/krillin/huginn/decode/ModbusShape.java` → Expected: 빈 출력
-- [ ] 옛 정책을 원칙으로 적어둔 문서 여섯 곳이 전부 갱신됐다
+- [ ] 옛 정책을 원칙으로 적어둔 문서 **일곱 곳**이 전부 갱신됐다
 - [ ] **인용 오류가 세 문서에서 정정됐다** — "소수점 둘째 자리까지 일치"
