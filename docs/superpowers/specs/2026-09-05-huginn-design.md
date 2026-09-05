@@ -162,7 +162,7 @@ record Finding(
 ```
 pcap 파일
   → PcapReader          글로벌 헤더 → 패킷 레코드 순회
-  → LinkLayerDecoder    Ethernet → IPv4 → TCP
+  → FrameDecoder        Ethernet(VLAN 포함) → IPv4 → TCP
   → TcpStreamAssembler  4-tuple 단위 바이트 스트림, seq 정렬·갭 감지
   → FrameExtractor      Modbus: MBAP 헤더 + PDU
   → Decoder             함수코드 → Access
