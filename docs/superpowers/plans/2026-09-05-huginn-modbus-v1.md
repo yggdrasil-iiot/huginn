@@ -22,7 +22,7 @@
 | `reconcile/` | `huginn-reconcile` | `Observation` 이음매, 대사, `Finding` | **없음** | 없음 |
 | `pcap/` | `huginn-pcap` | pcap 파일 → 패킷 → TCP 스트림 | **없음** | 없음 |
 | `decode/` | `huginn-decode` | MBAP 프레이밍·함수코드 → `Observation` | **없음** | `huginn-reconcile` · `huginn-pcap` |
-| `cli/` | `huginn-cli` | 배선·리포트 | **없음** | 위 전부 · `huginn-pcap` test-jar(테스트 한정, Task 13) |
+| `cli/` | `huginn-cli` | 배선·리포트 | **없음** | 위 전부 · `huginn-pcap`·`huginn-decode` test-jar(테스트 한정, Task 13) |
 
 **`서드파티` 열의 "없음"은 런타임 서드파티 라이브러리가 없다는 뜻이다.** 모듈 간 의존은 `모듈 간` 열대로 있다.
 
@@ -72,6 +72,7 @@
     <junit.version>5.10.3</junit.version>
     <maven-surefire-plugin.version>3.2.5</maven-surefire-plugin.version>
     <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+    <maven-jar-plugin.version>3.4.1</maven-jar-plugin.version>
   </properties>
 
   <dependencyManagement>
@@ -114,6 +115,11 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
           <version>${maven-shade-plugin.version}</version>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-jar-plugin</artifactId>
+          <version>${maven-jar-plugin.version}</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -387,7 +393,7 @@ class PolicyLoaderTest {
 - [ ] **Step 2: 실패 확인**
 
 Run: `mvn -pl contract -am test`
-Expected: 컴파일 실패
+Expected: 컴파일 실패 — `CommunicationPolicy`·`PolicyLoader`·`PolicyException` 심볼 없음(`Access`·`Protocol`은 이미 있다)
 
 - [ ] **Step 3: 구현**
 
@@ -409,7 +415,7 @@ record PolicyDocument(int version, List<Peer> peers, List<Rule> allowed) {
 }
 ```
 
-`PolicyLoader.parse(String yaml)`:
+`PolicyLoader.parse`는 **`public static CommunicationPolicy parse(String yaml)`**다 — 클래스만 public 이고 메서드가 패키지-프라이빗이면 Task 13 `Pipeline`과 Task 15 `ExamplePolicyTest`에서 접근 불가로 깨진다:
 
 1. `new ObjectMapper(new YAMLFactory())` — `FAIL_ON_UNKNOWN_PROPERTIES`는 기본이 켜짐이므로 **끄지 않는다.**
 2. **Jackson이 던지는 모든 예외(`JacksonException`)를 `PolicyException`으로 감싼다.** 감싸지 않으면 `알_수_없는_필드`·`깨진_YAML` 테스트가 `UnrecognizedPropertyException`/`JsonParseException`을 받아 실패한다.
@@ -535,7 +541,7 @@ class ReconcilerTest {
 - [ ] **Step 2: 실패 확인**
 
 Run: `mvn -pl reconcile test`
-Expected: 컴파일 실패
+Expected: 컴파일 실패 — `PolicyView`·`Severity`·`Finding`·`ReconcileResult`·`Reconciler` 심볼 없음. 다른 이유로 깨지면 멈추고 원인을 본다
 
 - [ ] **Step 3: 구현**
 
@@ -574,7 +580,7 @@ public record Finding(Severity severity, Kind kind, Observation evidence, String
 
 `Reconciler`는 `public final class`이고 생성자는 `public Reconciler(PolicyView policy)`다. **`ReconcileResult`와 함께 반드시 `public`이어야 한다** — Task 5의 통합 테스트가 `dev.krillin.huginn.contract` 패키지에 있어 패키지-프라이빗이면 컴파일되지 않는다. Task 5 Step 2가 이미 컴파일 실패를 기대하므로 그 실패에 가려져 Step 4에서야 드러난다.
 
-`Reconciler.reconcile(List<Observation>)`은 입력 순서를 유지하며 한 번 훑는다.
+`Reconciler.reconcile`은 **`public ReconcileResult reconcile(List<Observation>)`**다(멤버까지 public 이어야 Task 5·청크 3이 부른다). 입력 순서를 유지하며 한 번 훑는다.
 - `access == UNDECIDABLE` → 정책을 조회하지 않고 `undecidableCount`만 올린다
 - `policy.allows(...)`가 true → 아무것도 하지 않는다
 - 그 외 → `Finding` 하나. `Severity`는 `WRITE`·`CONTROL` → `HIGH`, `READ` → `MEDIUM`
@@ -713,22 +719,23 @@ import java.nio.ByteOrder;
 
 /**
  * 테스트용 pcap 조립기. 외부 캡처 파일 없이 결정적으로 검증하기 위한 것이다.
- * <p>Task 13 의 cli E2E 테스트가 test-jar 를 통해 이것을 그대로 쓴다 — 그래서 public 이고,
- * 메서드도 전부 public 이다. 복제하면 두 벌이 갈라진다.
+ * <p>Task 13 의 cli E2E 테스트가 test-jar 를 통해 이것을 그대로 쓴다 — 그래서 클래스도
+ * 정적 팩터리도 인스턴스 메서드도 전부 public 이다(private 생성자만 예외).
+ * 클래스만 public 으로 두면 다른 패키지에서 ethernet() 부터 막힌다. 복제하면 두 벌이 갈라진다.
+ * withSnaplen 은 PcapReader 가 snaplen 을 읽지도 쓰지도 않아 소비자가 없으므로 두지 않는다.
  */
 public final class PcapBuilder {
 
-    static final int MAGIC_MICROS = 0xA1B2C3D4;
-    static final int MAGIC_NANOS  = 0xA1B23C4D;
-    static final int MAGIC_BIG_ENDIAN = 0xD4C3B2A1;
-    static final int MAGIC_PCAPNG = 0x0A0D0D0A;
+    public static final int MAGIC_MICROS = 0xA1B2C3D4;
+    public static final int MAGIC_NANOS  = 0xA1B23C4D;
+    public static final int MAGIC_BIG_ENDIAN = 0xD4C3B2A1;
+    public static final int MAGIC_PCAPNG = 0x0A0D0D0A;
 
     private final ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-    static PcapBuilder ethernet() { return new PcapBuilder(1, MAGIC_MICROS, 65535); }
-    static PcapBuilder withMagic(int magic) { return new PcapBuilder(1, magic, 65535); }
-    static PcapBuilder withLinkType(int linkType) { return new PcapBuilder(linkType, MAGIC_MICROS, 65535); }
-    static PcapBuilder withSnaplen(int snaplen) { return new PcapBuilder(1, MAGIC_MICROS, snaplen); }
+    public static PcapBuilder ethernet() { return new PcapBuilder(1, MAGIC_MICROS, 65535); }
+    public static PcapBuilder withMagic(int magic) { return new PcapBuilder(1, magic, 65535); }
+    public static PcapBuilder withLinkType(int linkType) { return new PcapBuilder(linkType, MAGIC_MICROS, 65535); }
 
     private PcapBuilder(int linkType, int magic, int snaplen) {
         ByteBuffer h = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN);
@@ -738,12 +745,12 @@ public final class PcapBuilder {
     }
 
     /** 온전한 패킷 — incl_len == orig_len */
-    PcapBuilder packet(int seconds, int micros, byte[] payload) {
+    public PcapBuilder packet(int seconds, int micros, byte[] payload) {
         return packet(seconds, micros, payload, payload.length);
     }
 
     /** 절단된 패킷 — incl_len(실제 저장) < orig_len(원본) */
-    PcapBuilder packet(int seconds, int micros, byte[] stored, int originalLength) {
+    public PcapBuilder packet(int seconds, int micros, byte[] stored, int originalLength) {
         ByteBuffer h = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN);
         h.putInt(seconds).putInt(micros).putInt(stored.length).putInt(originalLength);
         out.writeBytes(h.array());
@@ -752,7 +759,7 @@ public final class PcapBuilder {
     }
 
     /** 손상·악의적 파일 — 선언 길이가 실제 잔여보다 크다 */
-    PcapBuilder packetWithDeclaredLength(int seconds, int micros, byte[] stored, int declaredInclLen) {
+    public PcapBuilder packetWithDeclaredLength(int seconds, int micros, byte[] stored, int declaredInclLen) {
         ByteBuffer h = ByteBuffer.allocate(16).order(ByteOrder.LITTLE_ENDIAN);
         h.putInt(seconds).putInt(micros).putInt(declaredInclLen).putInt(declaredInclLen);
         out.writeBytes(h.array());
@@ -760,7 +767,7 @@ public final class PcapBuilder {
         return this;
     }
 
-    byte[] build() { return out.toByteArray(); }
+    public byte[] build() { return out.toByteArray(); }
 }
 ```
 
@@ -921,7 +928,7 @@ git commit -m "feat: pcap 리더와 합성 빌더 — 포맷 변형을 원인과
 
 ```java
 /** TCP 플래그 비트. 데이터 세그먼트는 보통 ACK 만 서 있다. */
-static final int FLAG_SYN = 0x02, FLAG_ACK = 0x10;
+public static final int FLAG_SYN = 0x02, FLAG_ACK = 0x10;
 
 /**
  * Ethernet(14) + IPv4(20 + options) + TCP(20 + options) 프레임을 조립한다.
@@ -931,7 +938,7 @@ static final int FLAG_SYN = 0x02, FLAG_ACK = 0x10;
  *                   클라이언트 SYN 은 FLAG_SYN, 서버 SYN+ACK 는 FLAG_SYN | FLAG_ACK.
  * @param ethPadTo   이 길이에 못 미치면 0으로 채운다. 이더넷 최소 프레임(60) 재현용.
  */
-static byte[] ethernetIpv4Tcp(String srcIp, int srcPort, String dstIp, int dstPort,
+public static byte[] ethernetIpv4Tcp(String srcIp, int srcPort, String dstIp, int dstPort,
                               long seq, int tcpFlags, byte[] payload,
                               int ipOptionBytes, int tcpOptionBytes, int ethPadTo) { ... }
 
@@ -941,24 +948,28 @@ static byte[] ethernetIpv4Tcp(String srcIp, int srcPort, String dstIp, int dstPo
  * @param vlanIds 바깥에서 안쪽 순서. 하나면 802.1Q, 둘이면 QinQ 이중 태그다.
  *                이중 태그를 만들 수 없으면 "if 가 아니라 반복" 규칙에 테스트가 붙지 않는다.
  */
-static byte[] vlanTagged(String srcIp, int srcPort, String dstIp, int dstPort,
+public static byte[] vlanTagged(String srcIp, int srcPort, String dstIp, int dstPort,
                          long seq, byte[] payload, int... vlanIds) { ... }
 
 /** UDP 프레임 — 대상이 아님을 확인하는 용도. */
-static byte[] ethernetIpv4Udp(String srcIp, int srcPort, String dstIp, int dstPort, byte[] payload) { ... }
+public static byte[] ethernetIpv4Udp(String srcIp, int srcPort, String dstIp, int dstPort, byte[] payload) { ... }
 
 /**
- * 단편화된 IPv4.
+ * 단편화된 IPv4. protocol 은 6(TCP)이고, **fragmentOffset == 0 이면 정상적인 20바이트 TCP
+ * 헤더(dataOffset 5, 4-튜플, seq, FLAG_ACK)를 채운다.**
+ * <p>포트·seq 인자가 없으면 IP 페이로드가 0으로 차서 dataOffset == 0 이 되고,
+ * MF·offset 검사를 **아예 구현하지 않은** 디코더도 `dataOffset < 5` 규칙에 걸려 똑같이
+ * skipped 를 낸다 — 두 단편화 테스트가 초록으로 통과하면서 아무것도 시험하지 않게 된다.
  *
- * @param fragmentOffset 0 이 아니면 TCP 헤더가 아예 없다.
+ * @param fragmentOffset 0 이 아니면 TCP 헤더가 아예 없다(그 자리부터 페이로드다).
  * @param moreFragments  MF 플래그. offset == 0 이라도 MF 가 서 있으면 첫 조각이라
- *                       페이로드가 잘려 있어 프레임 경계를 믿을 수 없다.
+ *                       페이로드가 뒤 조각으로 이어져 프레임 경계를 믿을 수 없다.
  */
-static byte[] ipv4Fragment(String srcIp, String dstIp, int fragmentOffset,
-                           boolean moreFragments, byte[] payload) { ... }
+public static byte[] ipv4Fragment(String srcIp, int srcPort, String dstIp, int dstPort, long seq,
+                           int fragmentOffset, boolean moreFragments, byte[] payload) { ... }
 
 /** 임의 ethertype 프레임 — ARP(0x0806) 등 IPv4 가 아닌 것을 만든다. */
-static byte[] ethernetWithEthertype(int ethertype, byte[] body) { ... }
+public static byte[] ethernetWithEthertype(int ethertype, byte[] body) { ... }
 ```
 
 구현 지침: IPv4 헤더의 `totalLength`는 **IP 헤더부터 페이로드 끝까지**의 실제 길이를 적는다(패딩 제외). IHL·dataOffset은 옵션 바이트 수에 맞춰 계산한다.
@@ -967,6 +978,7 @@ static byte[] ethernetWithEthertype(int ethertype, byte[] body) { ... }
 
 테스트 헬퍼 둘:
 - `private List<CapturedPacket> readAsPackets(byte[]... frames)` — 프레임들을 pcap 으로 감싸 `PcapReader.read`에 태운다.
+- `private List<CapturedPacket> readAsSnappedPackets(byte[] frame, int originalLength)` — snaplen 절단 재현. `incl_len < orig_len`인 패킷으로 감싼다.
 - `private TcpSegment decodeSingle(byte[] frame)` — `FrameDecoder.decode(readAsPackets(frame))`의 유일한 세그먼트를 돌려준다.
 
 ```java
@@ -976,7 +988,7 @@ void TCP_세그먼트의_4튜플과_페이로드를_뽑는다() { /* 10.0.1.20:4
 @Test
 void 이더넷_패딩이_페이로드에_섞이지_않는다() {
     // 짧은 프레임은 60바이트로 패딩된다. 캡처 잔여 바이트로 자르면 0바이트가 스트림에 섞이고,
-    // 그 0들이 MBAP 길이 필드 경계 탐색을 어긋나게 한다.
+    // 그 0들이 응용 계층 프레임의 길이 필드 경계 탐색을 어긋나게 한다.
     byte[] frame = PcapBuilder.ethernetIpv4Tcp("10.0.1.20", 40000, "10.0.2.11", 502,
         1000, PcapBuilder.FLAG_ACK, new byte[]{1, 2, 3}, 0, 0, /* ethPadTo */ 60);
     TcpSegment s = decodeSingle(frame);
@@ -1029,14 +1041,21 @@ void TCP가_아니면_대상_외로_센다() { /* UDP */ }
 @Test
 void 단편화된_조각은_대상_외로_센다() {
     // fragment offset != 0 인 조각에는 TCP 헤더가 없다. 있다고 가정하고 파싱하면 쓰레기를 읽는다.
+    // 페이로드는 유효한 TCP 헤더처럼 보이는 바이트로 채운다 — 0 으로 채우면 offset 검사를
+    // 지운 구현도 dataOffset < 5 에 걸려 같은 답을 내고 테스트가 공허해진다.
 }
 
 @Test
 void MF가_선_첫_조각도_대상_외다() {
     // offset == 0 이라 TCP 헤더는 있지만 페이로드가 뒤 조각으로 이어진다.
-    // 온전한 세그먼트로 취급하면 MBAP 길이가 실제보다 길어 다음 프레임 경계가 어긋난다.
-    byte[] frame = PcapBuilder.ipv4Fragment("10.0.1.20", "10.0.2.11", 0, true, new byte[100]);
-    assertEquals(1, FrameDecoder.decode(readAsPackets(frame)).skipped());
+    // 온전한 세그먼트로 취급하면 응용 계층 길이 필드가 실제보다 길어 다음 경계가 어긋난다.
+    // TCP 헤더가 온전하므로 MF 검사를 빼면 유효 세그먼트가 나와 skipped == 0 이 된다 —
+    // 정확히 그 이유로 실패하는 테스트다.
+    byte[] frame = PcapBuilder.ipv4Fragment("10.0.1.20", 40000, "10.0.2.11", 502, 1000,
+        /* fragmentOffset */ 0, /* moreFragments */ true, new byte[]{1, 2, 3});
+    DecodedFrames d = FrameDecoder.decode(readAsPackets(frame));
+    assertEquals(1, d.skipped());
+    assertTrue(d.segments().isEmpty());
 }
 
 @Test
@@ -1051,10 +1070,26 @@ void 헤더는_온전한데_페이로드가_잘리면_절단으로_표시하고_
 }
 
 @Test
+void pcap_수준_절단이_세그먼트_절단으로_전파된다() {
+    // truncated 는 CapturedPacket.truncated() 와 잘라내기의 OR 인데, 다른 테스트는
+    // 전부 incl_len == orig_len 이라 앞 절반을 한 번도 시험하지 않는다.
+    // CapturedPacket.truncated() 를 통째로 무시하는 구현이 나머지를 전부 통과하고,
+    // 그러면 tcpdump -s 96 캡처에서 청크 3 의 절단 관찰이 조용히 무력해진다.
+    byte[] frame = PcapBuilder.ethernetIpv4Tcp("10.0.1.20", 40000, "10.0.2.11", 502,
+        1000, PcapBuilder.FLAG_ACK, new byte[]{1, 2, 3}, 0, 0, 0);
+    TcpSegment s = FrameDecoder.decode(readAsSnappedPackets(frame, 1500)).segments().get(0);
+    assertTrue(s.truncated(), "페이로드는 온전해도 캡처가 잘렸으면 절단이다");
+    assertArrayEquals(new byte[]{1, 2, 3}, s.payload());
+}
+
+@Test
 void 대상_외_패킷_수를_보고한다() {
     // "아무것도 못 읽었다" 를 드러내려면 건너뛴 수를 알아야 한다.
-    DecodedFrames d = FrameDecoder.decode(packets);
+    DecodedFrames d = FrameDecoder.decode(readAsPackets(
+        PcapBuilder.ethernetWithEthertype(0x0806, new byte[28]),                        // ARP
+        PcapBuilder.ethernetIpv4Udp("10.0.1.20", 40000, "10.0.2.11", 502, new byte[]{1, 2, 3})));
     assertEquals(2, d.skipped());
+    assertTrue(d.segments().isEmpty());
 }
 ```
 
@@ -1102,7 +1137,11 @@ public record DecodedFrames(List<TcpSegment> segments, int skipped) {}
 | TCP 헤더 시작 | 이더넷 헤더 끝 + `IHL*4` |
 | dataOffset | TCP 오프셋 12의 **상위** 니블 × 4 |
 | 플래그 | TCP 오프셋 13. `0x02` = SYN, `0x10` = ACK |
+| 출발지·목적지 IP | IP 오프셋 12·16, 각 4바이트 |
+| 출발지·목적지 포트 | TCP 오프셋 0·2, 각 2바이트 BE |
 | seq | TCP 오프셋 4, 4바이트 BE |
+
+**16비트 필드는 전부 `& 0xFFFF`로 읽는다** — `ByteBuffer.getShort()`는 부호 있는 값이라 `0x8100`이 `-32512`, `0x88A8`이 `-30552`가 되어 **VLAN 비교가 거짓이 되고 캡처 전체가 사라진다.** 포트 40000도 마찬가지로 음수가 된다. 32비트 seq는 `& 0xFFFFFFFFL`.
 
 `FrameDecoder.decode(List<CapturedPacket>) → DecodedFrames`:
 - ethertype은 오프셋 12에서 읽는다. `0x0800`이면 IPv4. **`0x8100`(또는 `0x88A8`)이면 802.1Q 태그이며, 그 다음 ethertype은 오프셋 16에 있다** — 태그 4바이트 중 앞 2바이트가 이미 읽은 TPID다. 이중 태그(QinQ)가 있으므로 **`if`가 아니라 반복**으로 벗긴다(그러지 않으면 이중 태그 트래픽이 통째로 사라져 fix 의 취지가 무너진다)
@@ -1112,11 +1151,12 @@ public record DecodedFrames(List<TcpSegment> segments, int skipped) {}
 - `sequence`는 `& 0xFFFFFFFFL`
 - `TcpSegment.truncated`는 **`CapturedPacket.truncated()`와 위 잘라내기 둘의 OR**다. 두 곳에서 값을 쓰므로 뒤엣것이 앞엣것을 덮어쓰지 않게 한다
 - 어떤 이유로든 대상이 아니면 `skipped`를 올린다(예외를 던지지 않는다)
+- **`segments`는 입력 패킷 순서를 유지한다** — Task 8의 최초 등장 순서 결정성이 이 전제 위에 선다
 
 - [ ] **Step 5: 통과 확인**
 
 Run: `mvn -pl pcap test`
-Expected: `Tests run: 27, Failures: 0` (`PcapReaderTest` 13 + `FrameDecoderTest` 14)
+Expected: `Tests run: 28, Failures: 0` (`PcapReaderTest` 13 + `FrameDecoderTest` 15)
 
 - [ ] **Step 6: 커밋**
 
@@ -1141,7 +1181,7 @@ git commit -m "feat: 프레임 디코드 — VLAN 대응, 페이로드 길이를
 ```java
 private static final String A = "10.0.1.20", B = "10.0.2.11";
 
-/** 전체형. at 은 seq 를 밀리초로 환산해 넣는다(seq 가 클수록 늦다). */
+/** 전체형. syn=false·ack=true 인 데이터 세그먼트. at 은 seq 를 밀리초로 환산해 넣는다. */
 private TcpSegment seg(String src, int sport, String dst, int dport,
                        long seq, String payload, boolean truncated) { ... }
 
@@ -1304,7 +1344,7 @@ public record TcpStream(
 - `truncated`는 **그 방향 세그먼트 중 하나라도 절단됐으면** true. 절단된 세그먼트의 (짧은) 페이로드도 `contiguousPrefix`에 그대로 기여한다 — 어차피 뒤가 갭이므로 버리면 `contiguousPrefix`만 짧아질 뿐 얻는 게 없다
 - **base seq는 바이트를 기여하는(길이 > 0) 세그먼트 중 최소 seq다.** SYN 은 키와 `sawSynOnly`만 남기고 **base 후보가 되지 않는다** — 되면 SYN(seq n)이 base가 되어 첫 데이터(seq n+1)가 오프셋 1에 놓이고, 길이 0 제외 규칙이 막으려던 1바이트 갭이 그대로 되살아난다
 - 바이트를 기여하는 세그먼트가 하나도 없으면(SYN만 잡힌 스트림) `contiguousPrefix`는 빈 배열, `hasGap`은 false다
-- **`at`은 그 방향에 등록된 모든 세그먼트 중 가장 이른 시각이다 — SYN도 후보다.** base seq와 달리 여기서는 길이 0을 배제하지 않는다. 배제하면 SYN만 잡힌 스트림의 `at`이 정의되지 않는다. 대신 이 선택 때문에 `Observation.at`은 요청 프레임의 시각이 아니라 **그 방향 스트림의 시작 시각**이 된다 — Task 2의 javadoc이 그렇게 적혀 있어야 한다
+- **`at`은 그 방향에 키를 등록시킨 세그먼트 중 가장 이른 시각이다 — `syn && !ack`인 SYN도 후보다.** 키를 등록하지 않는 세그먼트(순수 ACK·FIN·SYN+ACK)는 `at` 후보도 아니다. base seq와 달리 여기서는 길이 0을 배제하지 않는다. 배제하면 SYN만 잡힌 스트림의 `at`이 정의되지 않는다. 대신 이 선택 때문에 `Observation.at`은 요청 프레임의 시각이 아니라 **그 방향 스트림의 시작 시각**이 된다 — Task 2의 javadoc이 그렇게 적혀 있어야 한다
 - **seq 범위 전체를 배열로 할당하지 않는다.** base가 100인데 잡음 세그먼트 하나가 seq 3,000,000,000이면 OOM이 난다. 정렬된 세그먼트를 순회하며 첫 갭에서 멈추므로 필요한 만큼만 이어붙이면 된다
 - seq 순으로 이어붙이되 **이미 채워진 오프셋은 덮어쓰지 않는다**(first-wins). **정렬은 stable해야 한다** — seq가 같고 내용이 다른 쌍에서 입력 순서가 이겨야 재전송 위장 방어가 결정적이 된다
 - 첫 갭에서 멈추고 그때까지를 `contiguousPrefix`로, `hasGap = true`로 둔다
@@ -1312,7 +1352,7 @@ public record TcpStream(
 - [ ] **Step 4: 통과 확인**
 
 Run: `mvn -pl pcap test`
-Expected: `Tests run: 41, Failures: 0` (13 + 14 + 14)
+Expected: `Tests run: 42, Failures: 0` (13 + 15 + 14)
 
 - [ ] **Step 5: 커밋**
 
@@ -1346,18 +1386,18 @@ git commit -m "feat: TCP 스트림 재조립 — SYN-without-ACK 기록, 갭 이
 
 MBAP: 트랜잭션ID(2) · 프로토콜ID(2, **반드시 0**) · 길이(2) · 유닛ID(1) · PDU.
 
-테스트 픽스처는 `decode/src/test/java/dev/krillin/huginn/decode/ModbusFixtures.java`에 모은다. **Task 11·12 도 같은 것을 쓰므로 `private`이 아니라 패키지-프라이빗 `static`이다** — `private`으로 두면 Task 12 가 `ModbusFixtures.mbap(...)`을 부르는 순간 컴파일이 깨진다. (청크 2 의 `PcapBuilder` 는 `pcap` 모듈 테스트 소스라 여기서 보이지 않는다.)
+테스트 픽스처는 `decode/src/test/java/dev/krillin/huginn/decode/ModbusFixtures.java`에 모은다. **Task 11·12 는 물론 Task 13 의 `cli` E2E 도 같은 것을 쓰므로 `public final class`이고 세 메서드도 `public static`이다** — `private`이면 Task 12 가 `ModbusFixtures.mbap(...)`을 부르는 순간, 패키지-프라이빗이면 Task 13 이 부르는 순간 컴파일이 깨진다. (청크 2 의 `PcapBuilder` 는 `pcap` 모듈 테스트 소스라 여기서 보이지 않는다.)
 
 ```java
-final class ModbusFixtures {
+public final class ModbusFixtures {
     /** MBAP 한 프레임. length = 2 + pduBody.length (유닛ID 1 + 함수코드 1 + 본문). */
-    static byte[] mbap(int tid, int uid, int fc, byte[] pduBody) { ... }
+    public static byte[] mbap(int tid, int uid, int fc, byte[] pduBody) { ... }
 
     /** 시작 주소·수량을 빅엔디언 2바이트씩 이어 붙인 4바이트(함수코드는 포함하지 않는다). */
-    static byte[] pdu(int startAddress, int quantity) { ... }
+    public static byte[] pdu(int startAddress, int quantity) { ... }
 
     /** 프레임 여러 개를 한 스트림으로 잇는다. */
-    static byte[] concat(byte[]... parts) { ... }
+    public static byte[] concat(byte[]... parts) { ... }
 }
 ```
 
@@ -1606,10 +1646,8 @@ git commit -m "feat: objectRef — 무엇을 건드렸는지 근거에 남긴다
 
 | 신호 | 성립 조건 | 가리키는 방향 |
 |---|---|---|
-| **S1 · SYN** | 두 스트림 중 **한쪽만** `sawSynOnly` | 그 방향이 클라이언트. SYN-without-ACK는 연결을 연 쪽만 보내므로 정의상 확정적이다. **SYN+ACK가 `sawSynOnly`가 아닌 것이 이 신호의 전부다** — `syn` 비트만 봤다면 핸드셰이크가 잡힌 모든 대화에서 양쪽 다 서고, 서버→클라이언트만 잡힌 캡처가 "SYN 있음"으로 들어와 응답을 요청으로 읽는다 |
-| **S2 · 포트** | 아래 둘 중 하나. 그 외에는 **미성립** | **서버로 지목된 포트로 향하는 방향이 클라이언트다** |
-| | (a) 한쪽만 **1024 미만** | 그쪽이 서버(well-known) |
-| | (b) 둘 다 1024 이상인데 한쪽만 **32768 미만** | 32768 미만인 쪽이 서버 |
+| **S1 · SYN** | 대화의 두 방향 중 `sawSynOnly`가 참인 방향이 **정확히 하나**다. **캡처에 없는 방향은 거짓으로 본다** — 그래야 SYN만 잡힌 단방향 캡처가 판정된다 | 그 방향이 클라이언트. SYN-without-ACK는 연결을 연 쪽만 보내므로 정의상 확정적이다. **SYN+ACK가 `sawSynOnly`가 아닌 것이 이 신호의 전부다** — `syn` 비트만 봤다면 핸드셰이크가 잡힌 모든 대화에서 양쪽 다 서고, 서버→클라이언트만 잡힌 캡처가 "SYN 있음"으로 들어와 응답을 요청으로 읽는다 |
+| **S2 · 포트** | 정확히 한쪽이 **1024 미만**이고 **다른 쪽이 32768 이상**이다. 그 외에는 **미성립** | 1024 미만인 쪽이 서버이므로 **그쪽으로 향하는 방향이 클라이언트다** |
 
 **결합 규칙:**
 
@@ -1622,7 +1660,22 @@ R1~R3은 배타적이고 순서대로 소진되므로 어떤 입력도 정확히
 
 **R3·R4가 이 규칙의 핵심이다.** "먼저 보낸 쪽"만으로 판정하면 한 방향만 잡힌 캡처에서 그 방향이 자동으로 "먼저"가 된다. 서버→클라이언트만 잡힌 캡처(비대칭 SPAN, PLC를 출발지로 건 BPF 필터, 요청 이후에 시작된 캡처)에서 **응답을 요청으로 읽고, FC 16 응답이 `WRITE`가 되고, PLC가 미등록 출발지가 되어 HIGH 오탐**이 난다. 설계 §5-⑤의 "서버 쪽을 판정할 수 없는 스트림은 `UNDECIDABLE`"이 정확히 이 경우를 가리킨다.
 
-**S2의 성립 조건을 (a)·(b)로 좁힌 이유.** "두 포트가 다르면 낮은 쪽이 서버"라고만 두면 **비표준 고포트 우회에서 정확히 그 HIGH 오탐이 난다.** 서버 `55000`, 클라이언트 임시 포트 `49500`인 대화의 PLC 방향만 잡힌 캡처를 보자 — 낮은 쪽은 49500이므로 "49500으로 향하는 방향"인 **서버 방향이 클라이언트로 지목되고**, R4의 단방향 가드는 지목한 방향이 캡처에 있으므로 발동하지 않는다. FC 16 응답은 주소·수량을 에코하므로 프레이밍·함수코드 검증을 그대로 통과해 `WRITE`가 되고, PLC가 미등록 출발지가 된다. **502에서는 안 나고 고포트 우회에서만 나는데, 하필 이 도구가 가장 잡아야 할 대상이다.** (a)·(b)는 "한쪽이 명백히 리스닝 포트로 보일 때만" 쓰겠다는 조건이고, 55000/49500은 둘 다 임시 포트 범위라 미성립 → R3으로 떨어져 `UNDECIDABLE`이 된다.
+**S2의 성립 조건이 왜 이렇게 좁은가.** 포트 휴리스틱은 **거울상을 원리적으로 구별하지 못한다.** "낮은 쪽이 서버"라는 전제는 낮은 쪽이 정말 리스닝 포트일 때만 참인데, 프레임만 보고는 그것을 확인할 방법이 없다. 조건을 좁히면 구멍이 막히는 게 아니라 **경계 너머로 옮겨갈 뿐이다.**
+
+앞선 두 개정이 그 증거다.
+
+| 개정 | 조건 | 뚫린 배치 |
+|---|---|---|
+| rev 4 | 두 포트가 다름 | 서버 55000 / 클라 49500 → 낮은 49500을 서버로 |
+| rev 5 | (a) 한쪽만 <1024, (b) 한쪽만 <32768 | (b)의 거울상 — 클라 1288 / 서버 50502 → 1288을 서버로 |
+
+rev 5의 (b)는 [1024, 32768)을 "명백한 리스닝 범위"로 취급했는데, 그 구간은 리스닝 범위가 아니라 **레거시·NAT 임시 포트 범위**다. WinCE HMI 패널(1025–5000), pfSense 계열 PAT 풀(10000–), VxWorks 스택(1024–)이 전부 여기 떨어진다. 그래서 **(b)를 삭제했다.**
+
+(a)에도 상대 포트 가드를 붙였다. "한쪽만 1024 미만"만으로는 **클라이언트가 특권 포트를 바인딩한 경우**(502↔502만 허용하는 방화벽을 통과하려고 로컬 포트 502를 잡는 관행, Moxa MGate 류 게이트웨이의 client 모드)에 `502 → 8502` 대화에서 502를 서버로 지목해 응답을 요청으로 읽는다. 상대가 임시 포트로 보일 때만 쓴다.
+
+**남는 손실:** 두 포트가 같은 부류인 대화(`8502↔40000`, `55000↔49500`, `502↔502`)는 SYN이 없으면 `UNDECIDABLE`이다. 비표준 포트 우회가 여기 걸린다 — 미검출이지만 리포트가 `UNDECIDABLE 대화`로 드러내므로 운영자가 조사한다. HIGH 오탐보다 싸다는 것이 이 계획의 전제다.
+
+**(원래 근거, 기록으로 남긴다.)** "두 포트가 다르면 낮은 쪽이 서버"라고만 두면 **비표준 고포트 우회에서 정확히 그 HIGH 오탐이 난다.** 서버 `55000`, 클라이언트 임시 포트 `49500`인 대화의 PLC 방향만 잡힌 캡처를 보자 — 낮은 쪽은 49500이므로 "49500으로 향하는 방향"인 **서버 방향이 클라이언트로 지목되고**, R4의 단방향 가드는 지목한 방향이 캡처에 있으므로 발동하지 않는다. FC 16 응답은 주소·수량을 에코하므로 프레이밍·함수코드 검증을 그대로 통과해 `WRITE`가 되고, PLC가 미등록 출발지가 된다. **502에서는 안 나고 고포트 우회에서만 나는데, 하필 이 도구가 가장 잡아야 할 대상이다.** (a)·(b)는 "한쪽이 명백히 리스닝 포트로 보일 때만" 쓰겠다는 조건이고, 55000/49500은 둘 다 임시 포트 범위라 미성립 → R3으로 떨어져 `UNDECIDABLE`이 된다.
 
 **시각 신호는 쓰지 않는다.** 앞선 개정에서 `TcpStream.at`이 이른 쪽을 클라이언트로 보는 신호를 두었으나 뺐다. 이 신호가 필요한 상황은 정의상 SYN이 없는 캡처인데, 그런 캡처는 대개 대화 중간부터 시작한다. 20ms 주기 폴링에 5ms 응답 지연이면 **첫 패킷이 응답일 확률이 약 25%**이고 그때 신호는 정확히 반대를 가리킨다 — 네 대화 중 하나꼴로 HIGH 오탐이다. 반대로 시각이 단독으로 결정하는 조합은 "두 포트가 같은 부류" 뿐이라 기여도 거의 없다. **거부권만 갖고 판정에는 기여하지 못하는 신호는 두지 않는다.** 판정할 수 없으면 `UNDECIDABLE`로 내는 것이 이 도구의 답이다(Task 9의 재동기화 거부와 같은 판단이다).
 
@@ -1756,13 +1809,33 @@ void 양쪽_다_임시_포트면_판정_불가다() {
 }
 
 @Test
-void 비표준_포트라도_한쪽만_리스닝_범위면_판정한다() {
-    // S2(b). 8502 는 32768 미만, 40000 은 이상 → 8502 가 서버.
-    // 좁힌 조건이 정상적인 비표준 포트 통신까지 못 보게 만들면 안 된다.
+void 서버_포트가_더_높으면_판정하지_않는다() {
+    // 거울상 가드 ①. 클라 1288(WinCE HMI 임시 포트) / 서버 50502.
+    // "낮은 쪽이 서버" 계열 규칙은 1288 을 서버로 지목해 응답을 요청으로 읽고,
+    // FC 16 응답이 WRITE 가 되어 PLC 가 미등록 출발지로 HIGH 오탐이 난다.
+    // 양방향이 다 잡혀 있어 단방향 가드(R4)가 구제하지 못한다.
     ObservationResult r = observe(
-        stream("10.0.1.20", 40000, "10.0.2.11", 8502, ModbusFixtures.mbap(1, 1, 3, ModbusFixtures.pdu(0, 2))));
+        stream("10.0.1.20", 1288, "10.0.2.11", 50502,
+               ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2, 4, 0, 1, 0, 2})),
+        stream("10.0.2.11", 50502, "10.0.1.20", 1288,
+               ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2})));
     assertEquals(1, r.observations().size());
-    assertEquals(Access.READ, r.observations().get(0).access());
+    assertEquals(Access.UNDECIDABLE, r.observations().get(0).access());
+    assertEquals(1, r.undecidableConversations());
+}
+
+@Test
+void 클라이언트가_특권_포트를_바인딩해도_판정하지_않는다() {
+    // 거울상 가드 ②. 502↔502 만 허용하는 방화벽을 지나려고 로컬 포트 502 를 바인딩한
+    // 클라이언트(또는 Moxa MGate 류 게이트웨이의 client 모드). "한쪽만 1024 미만" 만으로는
+    // 502 를 서버로 지목해 8502→502 응답 방향을 클라이언트로 읽는다.
+    ObservationResult r = observe(
+        stream("10.0.1.30", 502, "10.0.2.11", 8502,
+               ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2, 4, 0, 1, 0, 2})),
+        stream("10.0.2.11", 8502, "10.0.1.30", 502,
+               ModbusFixtures.mbap(1, 1, 16, new byte[]{0, 0, 0, 2})));
+    assertEquals(1, r.observations().size());
+    assertEquals(Access.UNDECIDABLE, r.observations().get(0).access());
 }
 
 @Test
@@ -1797,7 +1870,7 @@ void 클라이언트_방향만_프레임을_못_뽑은_대화도_어딘가에_�
     // R4 가 발동하지 않는다. 여기서 종결 규칙이 없으면 이 대화가 세 계수 어디에도 안 세여
     // 완료 조건의 "합 == 전체 대화 수" 가 깨진다.
     ObservationResult r = observe(
-        stream("10.0.1.20", 40000, "10.0.2.11", 502, "쓰레기 바이트".getBytes()),
+        stream("10.0.1.20", 40000, "10.0.2.11", 502, "쓰레기 바이트".getBytes(StandardCharsets.UTF_8)),
         stream("10.0.2.11", 502, "10.0.1.20", 40000, ModbusFixtures.mbap(1, 1, 3, new byte[]{4, 0, 0, 0, 0})));
     assertEquals(0, r.decodedConversations());
     assertEquals(1, r.undecidableConversations());
@@ -1828,24 +1901,24 @@ public record ObservationResult(List<Observation> observations,
     int decodedConversations, int undecidableConversations, int skippedConversations) {}
 ```
 
-`ModbusObserver`는 **`public final class`**, `observe`는 **`public static`**이다 — 청크 3의 `Pipeline`이 부른다. `ModbusFramer`·`ModbusAccess`·`ModbusObjectRef`·`ModbusFrame`·`FramingResult`는 `decode` 안에서만 쓰이므로 패키지-프라이빗으로 충분하다.
+`ModbusObserver`는 **`public final class`**, `observe`는 **`public static`**이다 — 청크 3의 `Pipeline`이 부른다. `ModbusFramer`·`ModbusAccess`·`ModbusObjectRef`는 `decode` 안에서만 쓰이므로 패키지-프라이빗으로 충분하다. `ModbusFrame`·`FramingResult`는 Task 9 가 `public record` 로 선언한다 — `decode` 밖 소비자는 없지만 레코드는 계약이므로 일관되게 둔다.
 
 진입점: `ModbusObserver.observe(List<TcpStream> streams) → ObservationResult`.
 
 1. 각 스트림에 `ModbusFramer.frames(stream.contiguousPrefix())`를 돌린다
-2. 스트림을 **4-tuple을 뒤집어 짝지어 대화로 묶는다**. 키는 두 (주소, 포트) 쌍을 정렬한 것이라 방향에 무관하다. 짝이 없으면 단방향 대화다. **대화의 순회 순서는 각 대화가 입력 `List<TcpStream>`에 처음 등장한 순서다** — 결정성은 완료 조건이므로 여기서 못박는다
+2. 스트림을 **4-tuple을 뒤집어 짝지어 대화로 묶는다**. 키는 두 (주소, 포트) 쌍을 **주소 문자열 오름차순, 같으면 포트 오름차순**으로 정렬한 것이라 방향에 무관하다. 포트가 다르면 다른 키이므로 같은 호스트 쌍의 연결 둘은 합쳐지지 않는다. 짝이 없으면 단방향 대화다. **대화의 순회 순서는 각 대화가 입력 `List<TcpStream>`에 처음 등장한 순서다** — 결정성은 완료 조건이므로 여기서 못박는다
 3. 대화의 **어느 스트림에서도** `isModbusStream == true`가 아니면 **절단·갭 여부와 무관하게** `skippedConversations`를 올리고 그 대화를 끝낸다(우선순위 표)
 4. 신호 표와 결합 규칙으로 클라이언트 방향을 고른다. **R3(판정 불가)이거나 R4(고른 방향이 캡처에 없음)이면** `Access.UNDECIDABLE` 관찰 **한 건**을 만들고 `undecidableConversations`를 올린 뒤 **그 대화를 여기서 끝낸다.** 끝내지 않으면 6이 이어 돌아 같은 대화에서 관찰 두 건과 이중 계수가 난다 — 단방향 캡처는 대개 SPAN·snaplen 산물이라 절단을 함께 달고 있어 흔한 경우다.
    이 관찰의 `source`/`target`·`at`은 **그 대화에 잡힌 스트림 중 입력 목록에 먼저 등장한 쪽**의 것을 쓴다(`objectRef`는 `"-"`). R3은 스트림이 둘일 수 있으므로 "잡힌 스트림"만으로는 결정되지 않는다 — 어느 쪽을 쓸지 정하지 않으면 리포트에 찍히는 주소가 구현자 재량이 된다
 5. 클라이언트 방향의 각 프레임을 `Observation`으로 만든다 — `at`은 `TcpStream.at`, `source`/`target`은 그 스트림의 4-tuple, `protocol`은 `Protocol.MODBUS_TCP`, `access`는 `ModbusAccess.of(fc)`, `objectRef`는 `ModbusObjectRef.of(fc, pdu)`
 6. **종결.** 5에서 프레임으로 만든 관찰이
    - **하나 이상이면** `decodedConversations`를 올린다. 이어서 클라이언트 방향에 `undecodedBytes > 0`이거나 `hasGap`이거나 `truncated`면 `UNDECIDABLE` 관찰을 **한 건 더** 붙인다(`objectRef`는 `"-"`). **대화 계수는 더 건드리지 않는다** — 이 대화는 이미 '해독'이다
-   - **0건이면** `UNDECIDABLE` 관찰 한 건을 만들고 `undecidableConversations`를 올린다. **이 갈래가 없으면 대화가 세 계수 어디에도 안 세인다** — 클라이언트 스트림이 프레임 중간에서 시작해 `isModbusStream == false`인데 서버 스트림은 정상인 대화가 그렇다. 3은 "어느 스트림에서도"라 안 걸리고, S2는 성립하며 지목한 방향도 캡처에 있어 4도 안 걸린다. `tcpdump -s 96`으로 폴링 중간부터 뜬 캡처에서 흔하다
+   - **0건이면** `UNDECIDABLE` 관찰 한 건을 만들고 `undecidableConversations`를 올린다. 이 관찰의 `source`/`target`/`at`은 **고른 클라이언트 방향 스트림**의 것을 쓴다(`objectRef`는 `"-"`). **이 갈래가 없으면 대화가 세 계수 어디에도 안 세인다** — 클라이언트 스트림이 프레임 중간에서 시작해 `isModbusStream == false`인데 서버 스트림은 정상인 대화가 그렇다. 3은 "어느 스트림에서도"라 안 걸리고, S2는 성립하며 지목한 방향도 캡처에 있어 4도 안 걸린다. `tcpdump -s 96`으로 폴링 중간부터 뜬 캡처에서 흔하다
 
 - [ ] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test`
-Expected: `decode` 모듈 `Tests run: 56, Failures: 0` (40 + `ModbusObserverTest` 16)
+Expected: `decode` 모듈 `Tests run: 57, Failures: 0` (40 + `ModbusObserverTest` 17)
 
 - [ ] **Step 5: 커밋**
 
@@ -1863,10 +1936,11 @@ git commit -m "feat: 요청만 관찰한다 — 응답을 관찰하면 정상 �
 - Create: `cli/src/main/java/dev/krillin/huginn/cli/Report.java`
 - Create: `cli/src/main/java/dev/krillin/huginn/cli/Huginn.java`
 - Modify: `cli/pom.xml` — shade 플러그인, 그리고 `pcap` test-jar 의존
-- Modify: `pcap/pom.xml` — `maven-jar-plugin`의 `test-jar` 골 추가
+- Modify: `pcap/pom.xml`, `decode/pom.xml` — `maven-jar-plugin`의 `test-jar` 골 추가
+- Modify: `pom.xml` — `maven-jar-plugin` 버전 고정
 - Test: `cli/src/test/java/dev/krillin/huginn/cli/EndToEndTest.java`
 
-**이 8개 테스트는 전부 실제 pcap 바이트를 필요로 하는데, `PcapBuilder`는 `pcap` 모듈의 테스트 소스에 있다.** 대책 없이 두면 Step 3 에서 구현자가 pcap 조립기를 다시 쓰게 되고 두 벌이 갈라진다. `pcap/pom.xml`에 `test-jar` 골을 붙이고 `cli/pom.xml`에 test 스코프로 당겨 쓴다(`PcapBuilder`는 Task 6 에서 이미 `public`이다).
+**이 태스크의 테스트는 전부 실제 pcap 바이트를 필요로 하는데, `PcapBuilder`는 `pcap` 모듈의 테스트 소스에 있다.** 대책 없이 두면 Step 3 에서 구현자가 pcap 조립기를 다시 쓰게 되고 두 벌이 갈라진다. `pcap/pom.xml`에 `test-jar` 골을 붙이고 `cli/pom.xml`에 test 스코프로 당겨 쓴다(`PcapBuilder`는 Task 6 에서 이미 `public`이다).
 
 ```xml
 <!-- pcap/pom.xml -->
@@ -1884,7 +1958,9 @@ git commit -m "feat: 요청만 관찰한다 — 응답을 관찰하면 정상 �
 </dependency>
 ```
 
-부모 POM 의 `pluginManagement`에 `maven-jar-plugin` 버전을 함께 고정한다. 파일 구조 표의 `cli` 행 의존에 **`huginn-pcap`(test-jar)** 이 추가된다.
+**`decode`에도 같은 배선이 필요하다.** 위 테스트들은 MBAP 바이트도 필요한데 `ModbusFixtures`는 `decode` 테스트 소스에 있다. 그대로 두면 구현자가 `cli` 테스트에 MBAP 조립기를 다시 짜게 되어 "두 벌이 갈라진다"는 이 문단의 우려가 그대로 재현되고, 손으로 짠 그 헬퍼가 완료 조건의 grep 에 걸린다. `decode/pom.xml`에도 `test-jar` 골을 붙이고 **`ModbusFixtures`와 세 메서드를 `public`으로 올린다**(Task 9 의 가시성 문단도 함께 고친다).
+
+부모 POM 의 `pluginManagement`와 `properties`에 `maven-jar-plugin` 버전을 고정한다. 파일 구조 표의 `cli` 행 의존에 **`huginn-pcap`·`huginn-decode`(test-jar)** 가 추가된다.
 
 세 층으로 나눈다 — `main`이 `System.exit`을 부르면 테스트에서 JVM 이 죽는다.
 
@@ -1909,7 +1985,7 @@ Report Pipeline.run(byte[] pcap, String policyYaml)  // 순수 실행
 | 해독한 대화 | `ObservationResult.decodedConversations` |
 | 대상 외 대화 | `ObservationResult.skippedConversations` |
 | UNDECIDABLE 대화 | `ObservationResult.undecidableConversations` — 관찰을 하나도 못 만든 대화 |
-| UNDECIDABLE 관찰 | `ReconcileResult.undecidableCount` — **모든** UNDECIDABLE 관찰 수. 판정 불가 대화가 남긴 1건 + 해독한 대화의 잔여·갭·절단·FC 43. 따라서 `UNDECIDABLE 대화`는 이 수의 부분집합이며, 둘을 빼서 "해독한 대화의 미해독"을 구할 수 없다 |
+| UNDECIDABLE 관찰 | `ReconcileResult.undecidableCount` — **모든** UNDECIDABLE 관찰 수. 판정 불가 대화가 남긴 1건 + 해독한 대화의 잔여·갭·절단·FC 43. 판정 불가 대화는 각각 정확히 1건을 기여하므로 `UNDECIDABLE 관찰 ≥ UNDECIDABLE 대화`이고, 차이는 해독한 대화가 낸 관찰 수다. 서로 다른 값이므로 둘 다 낸다 |
 
 관찰 쪽을 빼면 FC 43만 잔뜩 든 캡처가 "대화 전부 해독"으로 보인다. 대화 쪽을 빼면 한 방향만 잡힌 캡처가 드러나지 않는다. 둘 다 필요하다.
 
@@ -1953,7 +2029,9 @@ void 리포트는_커버리지를_함께_낸다() {
     Report r = Pipeline.run(capture, policy);
     String out = r.render();
     assertTrue(out.contains("처리 패킷"));
+    assertTrue(out.contains("대상 외 패킷"));
     assertTrue(out.contains("해독한 대화"));
+    assertTrue(out.contains("대상 외 대화"));
     assertTrue(out.contains("UNDECIDABLE 대화"));
     assertTrue(out.contains("UNDECIDABLE 관찰"), "대화 수와 관찰 수는 다른 값이며 둘 다 내야 한다");
 }
@@ -2109,7 +2187,7 @@ git commit -m "docs: README와 예시 정책"
 
 - [ ] `mvn test` 전체 통과
 - [ ] **`decode` 밖 어디에도 MBAP·PDU·함수코드를 다루는 코드가 없다** (`Protocol.MODBUS_TCP`라는 *이름*은 정책 계약이 쓰므로 `reconcile`·`contract`에 있는 것이 정상이다)
-      Run: `grep -rn "MBAP\|functionCode\|unitId\|protocolId" --include=*.java pcap contract reconcile cli` → Expected: 히트 0건
+      Run: `grep -rn "MBAP\|functionCode\|unitId\|protocolId" --include=*.java pcap/src/main contract/src/main reconcile/src/main cli/src/main` → Expected: 히트 0건 (테스트 소스는 제외한다 — 주장은 main 코드에 대한 것이고, `cli` 테스트는 `ModbusFixtures`를 정당하게 쓴다)
 - [ ] `pcap`·`decode`·`reconcile` 모듈에 런타임 서드파티 의존이 없다
       Run: `mvn -pl pcap,decode,reconcile dependency:tree` → Expected: `compile`/`runtime` 스코프에 `com.fasterxml.*`가 없다
 - [ ] **같은 pcap·정책을 두 번 돌리면 같은 리포트 문자열이 나온다** (Task 13 `같은_입력에_같은_리포트가_나온다`) — 결정성은 설계 §8의 시험 전략이자 스트림 열거·대화 순회 규칙의 존재 이유다
@@ -2118,6 +2196,7 @@ git commit -m "docs: README와 예시 정책"
 - [ ] 위반이 든 합성 캡처에서 실제로 잡힌다 — 정상 캡처에서 0건인 것만으로는 증명되지 않는다
 - [ ] **요청과 응답이 모두 든 정상 캡처에서 위반이 0건이다** — 요청/응답 결함의 회귀 가드
 - [ ] **한 방향만 잡힌 캡처가 위반이 아니라 `UNDECIDABLE`로 나온다** — 클라이언트 판정의 회귀 가드
+- [ ] **서버 포트가 클라이언트 포트보다 크거나, 클라이언트가 특권 포트를 바인딩한 양방향 캡처에서도 응답이 요청으로 읽히지 않는다** — 포트 휴리스틱의 거울상 가드. 위 단방향 가드로는 잡히지 않는다(둘 다 양방향이다)
 - [ ] **SYN+ACK를 SYN으로 읽지 않는다** — 그러면 서버가 클라이언트로 판정되어 같은 오탐이 다른 경로로 되살아난다
 - [ ] `java -jar cli/target/huginn.jar <capture> <policy>`가 실제로 실행되고 종료 코드가 0/1/2 계약을 지킨다
 - [ ] 공개 ICS 캡처로 설계 §10의 반증 조건을 실제로 시험하고 결과를 기록했다
