@@ -2,7 +2,7 @@ package dev.krillin.huginn.cli;
 
 import dev.krillin.huginn.contract.CommunicationPolicy;
 import dev.krillin.huginn.contract.PolicyLoader;
-import dev.krillin.huginn.decode.ModbusObserver;
+import dev.krillin.huginn.decode.TrafficObserver;
 import dev.krillin.huginn.decode.ObservationResult;
 import dev.krillin.huginn.pcap.CapturedPacket;
 import dev.krillin.huginn.pcap.DecodedFrames;
@@ -20,7 +20,7 @@ import java.util.List;
  * 여기서는 다루지 않는다({@link Huginn} 이 한다).
  *
  * <p>커버리지는 각 층이 낸 수를 그대로 모은다 — {@code PcapReader}(처리 패킷),
- * {@code FrameDecoder}(대상 외 패킷), {@code ModbusObserver}(대화 셋), {@code Reconciler}
+ * {@code FrameDecoder}(대상 외 패킷), {@code TrafficObserver}(대화 셋), {@code Reconciler}
  * (위반과 UNDECIDABLE 관찰). 어디서 몇이 나왔는지가 리포트 줄과 1:1 로 대응해야
  * 운영자가 수를 해석할 수 있다.
  */
@@ -36,7 +36,7 @@ final class Pipeline {
         List<CapturedPacket> packets = PcapReader.read(pcap);
         DecodedFrames frames = FrameDecoder.decode(packets);
         List<TcpStream> streams = TcpStreamAssembler.assemble(frames.segments());
-        ObservationResult observed = ModbusObserver.observe(streams);
+        ObservationResult observed = TrafficObserver.observe(streams);
         ReconcileResult reconciled = new Reconciler(policy).reconcile(observed.observations());
 
         return new Report(
