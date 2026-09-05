@@ -1,6 +1,6 @@
 # Huginn — 설계
 
-- 상태: 승인됨 (2026-09-05)
+- 상태: 승인됨 (2026-09-05) · **1차 범위를 Modbus/TCP 단독으로 축소** (2026-09-05)
 - 저장소: `yggdrasil-iiot/huginn` · Java 17 · Maven 멀티모듈 · Apache-2.0
 
 ---
@@ -31,7 +31,7 @@ Huginn은 그 답을 만든다. 신화에서 후긴과 무닌은 한 쌍이고, 
 
 ### 만든다
 
-- **pcap 파일**을 읽어 **Modbus/TCP · S7comm** 대화를 해독한다
+- **pcap 파일**을 읽어 **Modbus/TCP** 대화를 해독한다
 - 해독한 통신을 **선언된 통신 정책과 대조**해 **미등록 통신**을 찾는다
 - 읽기·쓰기·제어를 구분한다 — 미등록 장비가 읽기만 한 것과 setpoint 를 쓴 것은 다른 사건이다
 
@@ -40,6 +40,7 @@ Huginn은 그 답을 만든다. 신화에서 후긴과 무닌은 한 쌍이고, 
 | 제외 | 이유 |
 |---|---|
 | 라이브 캡처 | 권한·환경 의존이 커서 테스트가 결정적이지 않다. 파서와 대사 로직이 같으므로 나중에 소스 어댑터로 추가하면 된다 |
+| **S7comm 해독** | TPKT → COTP → S7 3중 프레이밍이라 Modbus 대비 작업량이 서너 배다. **1차에서 증명할 것은 프로토콜 개수가 아니라 대사 루프 전체가 서는가**이므로, 루프를 먼저 세우고 두 번째 프로토콜로 붙인다. 그때 `Observation` 이음매가 제대로 잡혔는지가 함께 검증된다 |
 | 능동 스캔 | OT 에서는 스캔이 설비를 멈춘다. 수동 관찰이 원칙이다 |
 | OPC UA · Sparkplug 해독 | **거버넌스 경로 자체**라 우회 탐지 대상이 아니다. 드리프트 대조용으로는 나중에 |
 | 허용 범위 위반 · 명령 인가 위반 대조 | 이미 Heimdall 이 길목에서 막는 것의 사후 확인이라 중복이 크다. 값 의미론은 프로토콜·장비마다 달라 따로 파야 한다 |
@@ -68,13 +69,13 @@ record Observation(
     Instant  at,          // pcap 패킷 시각
     Endpoint source,      // IP:port
     Endpoint target,
-    Protocol protocol,    // MODBUS_TCP | S7COMM
+    Protocol protocol,    // MODBUS_TCP  (S7COMM 등은 이후)
     Access   access,      // READ | WRITE | CONTROL | UNDECIDABLE
     String   objectRef    // 건드린 주소·DB (프로토콜별로 정규화)
 )
 ```
 
-**프로토콜 지식은 `decode` 경계에서 끝난다.** 대사기는 Modbus 도 S7 도 모른다. 나중에 EtherNet/IP 를 얹어도 대사기는 바뀌지 않는다.
+**프로토콜 지식은 `decode` 경계에서 끝난다.** 대사기는 Modbus 를 모른다. **이 경계가 제대로 잡혔는지는 두 번째 프로토콜(S7comm)을 붙일 때 드러난다** — 그때 `decode` 밖이 하나도 바뀌지 않아야 한다.
 
 ---
 
@@ -134,7 +135,8 @@ record Finding(
 | | READ | WRITE | CONTROL |
 |---|---|---|---|
 | Modbus/TCP | 1 · 2 · 3 · 4 | 5 · 6 · 15 · 16 · 22 · 23 | 8(진단) · 43(장치식별) |
-| S7comm | 함수 4 (Read Var) | 함수 5 (Write Var) | `0x28` · `0x29` (PLC Start/Stop) |
+
+*(참고 — 2차에 붙일 S7comm: 함수 4 = READ, 함수 5 = WRITE, `0x28`·`0x29`(PLC Start/Stop) = CONTROL)*
 
 ---
 
@@ -145,13 +147,13 @@ pcap 파일
   → PcapReader          글로벌 헤더 → 패킷 레코드 순회
   → LinkLayerDecoder    Ethernet → IPv4 → TCP
   → TcpStreamAssembler  4-tuple 단위 바이트 스트림, seq 정렬·갭 감지
-  → FrameExtractor      Modbus: MBAP+PDU / S7: TPKT → COTP → S7 헤더
+  → FrameExtractor      Modbus: MBAP 헤더 + PDU
   → Decoder             함수코드 → Access
   → Reconciler          CommunicationPolicy 대조
   → Report
 ```
 
-pcap 파싱은 **외부 의존 없이 직접 구현한다.** libpcap 바인딩을 쓰면 네이티브 의존이 생겨 테스트가 환경을 탄다. pcap 파일 포맷 자체는 단순하고(글로벌 헤더 + 패킷 헤더 + 링크레이어), 어차피 Modbus·S7 디코더는 직접 써야 하므로 그 아래 계층도 직접 쓰면 **의존성 0으로 결정적 테스트**가 된다.
+pcap 파싱은 **외부 의존 없이 직접 구현한다.** libpcap 바인딩을 쓰면 네이티브 의존이 생겨 테스트가 환경을 탄다. pcap 파일 포맷 자체는 단순하고(글로벌 헤더 + 패킷 헤더 + 링크레이어), 어차피 Modbus 디코더는 직접 써야 하므로 그 아래 계층도 직접 쓰면 **의존성 0으로 결정적 테스트**가 된다.
 
 ---
 
@@ -179,6 +181,7 @@ pcap 파싱은 **외부 의존 없이 직접 구현한다.** libpcap 바인딩�
 
 ## 9. 나중으로 미룬 것
 
+- **S7comm 해독** — 두 번째 프로토콜이자 `Observation` 이음매의 첫 시험
 - 라이브 캡처 소스 어댑터
 - OPC UA · Sparkplug 해독 → 거버넌스 경로의 **드리프트** 대조
 - 허용 범위 위반(`MasterSpec`) · 명령 인가 위반(ACL) 대조
@@ -189,6 +192,7 @@ pcap 파싱은 **외부 의존 없이 직접 구현한다.** libpcap 바인딩�
 
 ## 10. 이 설계가 틀렸다고 판명되는 조건
 
-- 공개 ICS 캡처에서 `UNDECIDABLE` 비율이 압도적이면 → 두 프로토콜만으로 유의미한 판정이 된다고 본 전제가 틀린 것이다
+- 공개 ICS 캡처에서 `UNDECIDABLE` 비율이 압도적이면 → Modbus 단독으로 유의미한 판정이 된다고 본 전제가 틀린 것이다
 - 실제 현장의 통신 조합이 손으로 선언할 수 없을 만큼 많으면 → `CommunicationPolicy` 를 사람이 쓴다는 전제가 틀린 것이고, Bifrost 연동이 선택이 아니라 필수가 된다
-- 우회가 Modbus·S7 이 아니라 다른 경로로 주로 일어나면 → 프로토콜 선택이 틀린 것이다
+- 우회가 Modbus 가 아니라 다른 경로로 주로 일어나면 → 프로토콜 선택이 틀린 것이다
+- S7comm 을 붙일 때 `decode` 밖이 바뀌어야 하면 → `Observation` 이음매를 잘못 잡은 것이다
