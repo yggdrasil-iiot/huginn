@@ -51,7 +51,7 @@
 
 §7의 이음매 측정이 전부 이 값에 걸린다. 잡아두지 않으면 Task 3·12와 완료 조건의 명령이 실행 불가능하다.
 
-- [ ] **Step 1: 시작 지점을 기록한다**
+- [x] **Step 1: 시작 지점을 기록한다**
 
 ```bash
 git rev-parse HEAD > .huginn-a-base    # .gitignore 에 넣지 않는다 — 커밋하지 말고 로컬에만 둔다
@@ -72,7 +72,7 @@ echo $BASE
 
 타입만 만든다. 소비자가 없으므로 테스트도 없다 — Task 2가 첫 소비자이고 그때 기존 20건이 검증한다.
 
-- [ ] **Step 1: `StreamEvidence` 작성**
+- [x] **Step 1: `StreamEvidence` 작성**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -93,7 +93,7 @@ record StreamEvidence(TcpStream stream, int frameCount, boolean leftoverBytes) {
 }
 ```
 
-- [ ] **Step 2: `Decoded` 작성**
+- [x] **Step 2: `Decoded` 작성**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -129,7 +129,7 @@ record Decoded(List<Observation> requestObservations,
 }
 ```
 
-- [ ] **Step 3: `ProtocolDecoder` 작성**
+- [x] **Step 3: `ProtocolDecoder` 작성**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -163,12 +163,12 @@ interface ProtocolDecoder {
 }
 ```
 
-- [ ] **Step 4: 컴파일 확인**
+- [x] **Step 4: 컴파일 확인**
 
 Run: `mvn -pl decode -am test-compile`
 Expected: 성공(경고 없음). 아직 소비자가 없다.
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src/main/java/dev/krillin/huginn/decode/StreamEvidence.java \
@@ -188,12 +188,12 @@ git commit -m "feat: 이음매 타입 셋 — 프로토콜 지식은 이 뒤에 
 
 **이 태스크에 새 테스트는 없다.** `ModbusObserverTest` 20건이 리팩터링 그물이고, 그 파일을 고쳐야 한다면 리팩터링이 아니라 동작 변경을 한 것이다.
 
-- [ ] **Step 1: 지금 동작을 초록으로 확인해 기준선을 잡는다**
+- [x] **Step 1: 지금 동작을 초록으로 확인해 기준선을 잡는다**
 
 Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `ModbusObserverTest` `Tests run: 20, Failures: 0`
 
-- [ ] **Step 2: `ModbusDecoder` 작성 — 기존 로직을 옮겨 담는다**
+- [x] **Step 2: `ModbusDecoder` 작성 — 기존 로직을 옮겨 담는다**
 
 `ModbusObserver`의 `clientDirection`·`observationOf`·`Direction` 을 이 클래스로 **판정 로직 그대로** 옮긴다. 옮기면서 고치면 무엇이 회귀를 냈는지 알 수 없다.
 
@@ -275,7 +275,7 @@ final class ModbusDecoder implements ProtocolDecoder {
     private record ShapeSignal(Direction direction, boolean contradiction, boolean bothRequest) { }
 ```
 
-- [ ] **Step 3: `TrafficObserver` 작성 — 순회와 계수**
+- [x] **Step 3: `TrafficObserver` 작성 — 순회와 계수**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -379,7 +379,7 @@ public final class TrafficObserver {
 
 > **꼬리 관찰의 주소는 언제나 `client` 것이다** — `tailUndecidable`이 서버 방향의 사건(Userdata·COTP 분할)에서 비롯됐더라도 그렇다. 1차와 같은 선택이며, 근거 줄에 찍히는 주소가 구현자 재량이 되지 않게 한다.
 
-- [ ] **Step 4: `Diagnosed` 작성**
+- [x] **Step 4: `Diagnosed` 작성**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -397,7 +397,7 @@ record Diagnosed(ObservationResult result,
 }
 ```
 
-- [ ] **Step 5: `ModbusObserver` 를 위임으로 축소**
+- [x] **Step 5: `ModbusObserver` 를 위임으로 축소**
 
 옮겨간 로직을 전부 지우고 아래만 남긴다. **`observe(List<TcpStream>)` 시그니처는 그대로 둔다** — `ModbusObserverTest` 20건이 이것을 부른다.
 
@@ -425,7 +425,7 @@ public final class ModbusObserver {
 }
 ```
 
-- [ ] **Step 6: 기존 테스트가 무변경으로 통과하는지 확인**
+- [x] **Step 6: 기존 테스트가 무변경으로 통과하는지 확인**
 
 Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `ModbusObserverTest` `Tests run: 20, Failures: 0` — **테스트 파일은 한 글자도 고치지 않았다.**
@@ -433,7 +433,7 @@ Expected: `ModbusObserverTest` `Tests run: 20, Failures: 0` — **테스트 파�
 Run: `git diff HEAD --stat -- decode/src/test cli/src/test`
 Expected: **빈 출력.** 테스트가 바뀌었다면 리팩터링이 아니라 동작 변경이다. 되돌리고 원인을 찾는다.
 
-- [ ] **Step 7: 커밋**
+- [x] **Step 7: 커밋**
 
 ```bash
 git add decode/src/main
@@ -447,7 +447,7 @@ git commit -m "refactor: 대화 순회와 Modbus 판정을 가른다 — 동작�
 **Files:**
 - Modify: `cli/src/main/java/dev/krillin/huginn/cli/Pipeline.java` (5행 import · 23행 javadoc · 39행 호출)
 
-- [ ] **Step 1: 세 곳을 바꾼다**
+- [x] **Step 1: 세 곳을 바꾼다**
 
 ```java
 import dev.krillin.huginn.decode.TrafficObserver;          // 5행
@@ -457,17 +457,17 @@ import dev.krillin.huginn.decode.TrafficObserver;          // 5행
         ObservationResult observed = TrafficObserver.observe(streams);                       // 39행
 ```
 
-- [ ] **Step 2: 전체 테스트 통과 확인**
+- [x] **Step 2: 전체 테스트 통과 확인**
 
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`, 총 157건 그대로.
 
-- [ ] **Step 3: 이음매 예산이 지켜졌는지 지금 한 번 센다**
+- [x] **Step 3: 이음매 예산이 지켜졌는지 지금 한 번 센다**
 
 Run: `git diff --stat $BASE..HEAD -- pcap/src/main contract/src/main reconcile/src/main cli/src/main`
 Expected: `cli/.../Pipeline.java | 6 +++---` 한 줄만(3줄 수정 = 추가 3 + 삭제 3). `Protocol.java`는 Task 8에서 더해진다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add cli/src/main/java/dev/krillin/huginn/cli/Pipeline.java
@@ -498,7 +498,7 @@ git commit -m "refactor: 파이프라인이 프로토콜 중립 순회기를 부
 
 > **이 태스크만 픽스처를 테스트보다 먼저 쓴다.** 1차의 `PcapBuilder`와 같은 예외다 — 픽스처가 없으면 그것을 검증할 테스트조차 쓸 수 없다. Task 5부터는 테스트가 먼저다.
 
-- [ ] **Step 1: 픽스처 작성**
+- [x] **Step 1: 픽스처 작성**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -658,7 +658,7 @@ public final class S7Fixtures {
 }
 ```
 
-- [ ] **Step 2: 픽스처가 설계 §4의 실제 바이트를 재현하는지 확인하는 테스트**
+- [x] **Step 2: 픽스처가 설계 §4의 실제 바이트를 재현하는지 확인하는 테스트**
 
 `decode/src/test/java/dev/krillin/huginn/decode/S7FixturesTest.java`:
 
@@ -680,12 +680,12 @@ void 설계_문서의_실제_캡처_바이트를_재현한다() {
 
 > 실물은 데이터 5바이트가 더 붙은 Write 요청이지만, 픽스처의 `job()`은 데이터 없는 판이다. 길이 계산 규칙이 같다는 것만 고정하면 충분하다 — 데이터 있는 판은 `ackData`가 덮는다.
 
-- [ ] **Step 3: 통과 확인**
+- [x] **Step 3: 통과 확인**
 
 Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `S7FixturesTest` `Tests run: 1, Failures: 0`
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add decode/src/test/java/dev/krillin/huginn/decode/S7Fixtures.java \
@@ -703,7 +703,7 @@ git commit -m "test: S7 픽스처 — 설계 문서의 실제 캡처 바이트�
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/S7Framer.java`
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/S7FramerTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -830,12 +830,12 @@ void Userdata도_프레임으로_센다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: 컴파일 실패 — `S7Framer`·`S7FramingResult` 없음
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 ```java
 /** @param parameter 파라미터 바이트 전체. ROSCTR 1 이면 첫 바이트가 함수코드다. */
@@ -868,12 +868,12 @@ public record S7FramingResult(List<S7Frame> frames, int undecodedBytes, boolean 
 
 **포트를 인자로 받지 않는다.** 102 라는 관례는 502 와 같은 이유로 쓰지 않는다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `S7FramerTest` `Tests run: 12, Failures: 0`
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src/main decode/src/test
@@ -888,7 +888,7 @@ git commit -m "feat: S7 프레이밍 — 비-S7 TPKT 는 소비하되 세지 않
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/S7Access.java`
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/S7AccessTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test void 읽기는_0x04다() { assertEquals(Access.READ, S7Access.of(0x04)); }
@@ -913,13 +913,13 @@ void 모르는_함수코드는_UNDECIDABLE이다(int fc) {
 }
 ```
 
-- [ ] **Step 2: 실패 확인** → 컴파일 실패
+- [x] **Step 2: 실패 확인** → 컴파일 실패
 
-- [ ] **Step 3: 구현** — `Map<Integer, Access>` 상수표. `ModbusAccess` 와 같은 형태를 쓴다(2차에서 재사용한다고 1차가 적어둔 그 형태다). 표에 없으면 `UNDECIDABLE`.
+- [x] **Step 3: 구현** — `Map<Integer, Access>` 상수표. `ModbusAccess` 와 같은 형태를 쓴다(2차에서 재사용한다고 1차가 적어둔 그 형태다). 표에 없으면 `UNDECIDABLE`.
 
-- [ ] **Step 4: 통과 확인** — `Tests run: 15, Failures: 0` (단일 3 + 파라미터 8 + 4)
+- [x] **Step 4: 통과 확인** — `Tests run: 15, Failures: 0` (단일 3 + 파라미터 8 + 4)
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src/main decode/src/test
@@ -934,7 +934,7 @@ git commit -m "feat: S7 함수코드 → Access, 제어 계열은 B단계까지 
 - Create: `decode/src/main/java/dev/krillin/huginn/decode/S7ObjectRef.java`
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/S7ObjectRefTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -1007,9 +1007,9 @@ void 첫_항목을_못_읽어도_항목_수는_적는다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인** → 컴파일 실패
+- [x] **Step 2: 실패 확인** → 컴파일 실패
 
-- [ ] **Step 3: 구현**
+- [x] **Step 3: 구현**
 
 `S7ObjectRef.of(byte[] parameter)`:
 - `parameter[0]`이 `0x04`·`0x05`가 아니거나 길이 < 2 → `fc:<n>`
@@ -1034,9 +1034,9 @@ void 첫_항목을_못_읽어도_항목_수는_적는다() {
 - `itemCount > 1` 이면 뒤에 ` (+<itemCount-1>)`. **첫 항목을 못 읽어 `fc:<n>` 이 된 경우에도 붙인다** — 항목이 여럿이라는 사실은 첫 항목을 읽었는지와 무관하다
 - `fc:<n>` 의 `<n>` 은 **`parameter[0] & 0xFF`** 다. 부호 있는 byte 로 쓰면 `0xF0` 이 `-16` 으로 나온다
 
-- [ ] **Step 4: 통과 확인** — `Tests run: 12, Failures: 0`
+- [x] **Step 4: 통과 확인** — `Tests run: 12, Failures: 0`
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src/main decode/src/test
@@ -1077,7 +1077,7 @@ git commit -m "feat: S7 objectRef — 실캡처는 100% 1200SYM 이고 S7ANY 는
     }
 ```
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -1190,9 +1190,9 @@ void 포트가_102가_아니어도_해독한다() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인** → `S7Decoder`·`Protocol.S7COMM` 없음
+- [x] **Step 2: 실패 확인** → `S7Decoder`·`Protocol.S7COMM` 없음
 
-- [ ] **Step 3: `Protocol` 에 상수 추가 — §7 예산의 나머지 절반**
+- [x] **Step 3: `Protocol` 에 상수 추가 — §7 예산의 나머지 절반**
 
 **열거형 선언 줄에 `, S7COMM` 만 더한다. 위의 6줄 javadoc 은 그대로 둔다.** 파일을 통째로 갈아치우면 §7 측정이 `Protocol.java | 10 +++---` 로 부풀어, 이 계획이 존재하는 이유인 그 측정이 흐려진다.
 
@@ -1203,7 +1203,7 @@ public enum Protocol { MODBUS_TCP, S7COMM }
 Run: `git diff --stat -- reconcile/src/main`
 Expected: `Protocol.java | 2 +-`
 
-- [ ] **Step 4: `S7Decoder` 구현**
+- [x] **Step 4: `S7Decoder` 구현**
 
 ```java
 final class S7Decoder implements ProtocolDecoder {
@@ -1267,9 +1267,9 @@ final class S7Decoder implements ProtocolDecoder {
 
 > **속도 주의.** 순회기는 모든 해독기의 `scan`을 모든 스트림에 돌리고 단축 평가를 하지 않는다. 151022의 대상 외 대화 93만 개가 이제 `S7Framer`도 통과하고, `ModbusDecoder`는 스트림당 최대 네 번(스캔 1 + 형태 신호 N + 클라이언트 1) 프레이밍한다. 1차의 2.6초 기준선보다 눈에 띄게 느려질 수 있다 — **멈춘 게 아니다.** 실제로 문제가 되면 그때 측정해서 다루고, 지금 미리 최적화하지 않는다.
 
-- [ ] **Step 5: 통과 확인** — `S7DecoderTest` `Tests run: 10, Failures: 0`
+- [x] **Step 5: 통과 확인** — `S7DecoderTest` `Tests run: 10, Failures: 0`
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add decode/src/main decode/src/test reconcile/src/main
@@ -1284,7 +1284,7 @@ git commit -m "feat: S7 해독기 — ROSCTR 이 방향을 선언하므로 신�
 - Modify: `decode/src/main/java/dev/krillin/huginn/decode/TrafficObserver.java` (`DECODERS` 에 `S7Decoder` 추가)
 - Test: `decode/src/test/java/dev/krillin/huginn/decode/CoexistenceTest.java`
 
-- [ ] **Step 1: 실패하는 테스트 작성**
+- [x] **Step 1: 실패하는 테스트 작성**
 
 ```java
 @Test
@@ -1353,16 +1353,16 @@ void 한_대화의_두_방향이_서로_다른_해독기에_걸리면_등록_순
 }
 ```
 
-- [ ] **Step 2: 실패 확인** → `DECODERS` 에 S7 이 없어 공존 테스트 실패
+- [x] **Step 2: 실패 확인** → `DECODERS` 에 S7 이 없어 공존 테스트 실패
 
-- [ ] **Step 3: 등록**
+- [x] **Step 3: 등록**
 
 ```java
     private static final List<ProtocolDecoder> DECODERS =
         List.of(new ModbusDecoder(), new S7Decoder());
 ```
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `mvn test | grep -E "Tests run:|BUILD"`
 Expected: `BUILD SUCCESS`. `CoexistenceTest` `Tests run: 4`. **기존 157건 + 신규 전부 통과이며 기존 테스트 파일은 여전히 무변경이다.**
@@ -1370,7 +1370,7 @@ Expected: `BUILD SUCCESS`. `CoexistenceTest` `Tests run: 4`. **기존 157건 + �
 Run: `git diff HEAD --stat -- decode/src/test/java/dev/krillin/huginn/decode/ModbusObserverTest.java cli/src/test`
 Expected: 빈 출력
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add decode/src
@@ -1396,7 +1396,7 @@ bash scripts/fetch-samples.sh      # 또는  pwsh scripts/fetch-samples.ps1
 
 캡처는 저장소에 없으므로(라이선스) **환경변수가 가리킬 때만 도는 테스트**로 둔다. 테스트 소스는 §7의 측정 밖이라 이음매 예산을 쓰지 않는다. CLI에 `--only=` 같은 플래그를 다는 것은 `cli/src/main` 변경이라 §7을 넘긴다.
 
-- [ ] **Step 1: 테스트 작성**
+- [x] **Step 1: 테스트 작성**
 
 ```java
 package dev.krillin.huginn.decode;
@@ -1515,12 +1515,12 @@ class RealCaptureTest {
 >
 > 그러므로 순서는 이렇다 — 차이가 나면 **먼저 대화 단위로 원인을 규명한다.** 프레이밍이나 방향 판정 결함이면 고친다(설계 §9의 반증 조건). 위 두 정당한 원인으로 설명되면 **`samples/README.md`에 그 설명과 함께 기록하고, 단언을 측정값으로 낮추되 주석에 이유를 남긴다.** 설명 없이 숫자만 바꾸는 것이 금지된 것이지, 설명된 차이를 반영하는 것이 금지된 게 아니다.
 
-- [ ] **Step 2: 캡처 없이 도는지 확인 — 건너뛰어야 한다**
+- [x] **Step 2: 캡처 없이 도는지 확인 — 건너뛰어야 한다**
 
 Run: `mvn -pl decode -am test | grep "Tests run:"`
 Expected: `RealCaptureTest` 가 skip 되고 나머지는 그대로 통과. CI 에서 캡처 없이도 초록이다.
 
-- [ ] **Step 3: 캡처를 물려 실행**
+- [x] **Step 3: 캡처를 물려 실행**
 
 Run (PowerShell):
 ```powershell
@@ -1536,7 +1536,7 @@ Expected: 회귀·프레임 관찰·배타성 테스트 통과, 나머지 둘은
 
 **S7 수가 어긋나면** 설계 §8의 네 원인 중 어느 것인지 대화 단위로 좁힌다 — 꼬리 `UNDECIDABLE`, 양방향 요청, tshark 의 TCP 재조립 대 `contiguousPrefix`, 다중 주장. 관찰은 4-tuple 을 들고 있으므로 엔드포인트 쌍으로 묶어 tshark 의 스트림별 Job 수와 맞춘다.
 
-- [ ] **Step 4: 커밋**
+- [x] **Step 4: 커밋**
 
 ```bash
 git add decode/src/test/java/dev/krillin/huginn/decode/RealCaptureTest.java
@@ -1555,7 +1555,7 @@ git commit -m "test: 실캡처 회귀·진단 하네스 — 캡처가 있을 때
 
 S7을 켜면 세 캡처 모두 수치가 바뀐다. 지금 기록된 표는 갱신하지 않으면 **그냥 틀린 값**이 된다.
 
-- [ ] **Step 1: 관찰된 S7 통신을 확인한다**
+- [x] **Step 1: 관찰된 S7 통신을 확인한다**
 
 Run:
 ```bash
@@ -1564,13 +1564,13 @@ tshark -r samples/4SICS-GeekLounge-151020.pcap -Y "s7comm.header.rosctr==1" \
 ```
 세 캡처 모두에 대해 돌려 폴러와 PLC 를 확인한다.
 
-- [ ] **Step 2: 정책 파일에 S7 규칙을 넣는다**
+- [x] **Step 2: 정책 파일에 S7 규칙을 넣는다**
 
 **편집 의도는 1차와 같다 — 관찰된 통신 중 일부만 선언한다.** 1차의 151022 정책이 폴러 → PLC 세 대의 **읽기만** 선언해 쓰기가 위반으로 드러나게 한 것처럼, S7도 **폴러 → PLC 의 READ 만 선언하고 WRITE 는 선언하지 않는다.** 전부 선언하면 위반이 0건이라 대사가 실제로 도는지 알 수 없다.
 
 151020·151021 은 지금 `peers: []` 이므로 실제 peer 를 채워 넣는다.
 
-- [ ] **Step 3: 세 캡처를 돌려 수치를 얻는다**
+- [x] **Step 3: 세 캡처를 돌려 수치를 얻는다**
 
 ```bash
 mvn -q -DskipTests package
@@ -1582,7 +1582,7 @@ for f in 151020 151021 151022; do
 done
 ```
 
-- [ ] **Step 4: 반증 조건 두 개를 실제로 측정한다**
+- [x] **Step 4: 반증 조건 두 개를 실제로 측정한다**
 
 설계 §8이 시험 방법까지 정해둔 것인데 앞 태스크의 어느 스텝도 이 수치를 만들지 않는다.
 
@@ -1596,7 +1596,7 @@ Huginn 의 `objectRef` 분포와 맞춘다 — `area2` `0x0052` 와 LID 값이 `
 
 **② 응답이 0건 관찰인지** — `RealCaptureTest`의 `frameObservations`가 tshark 의 ROSCTR 1 수와 정확히 같다는 것이 곧 이 증명이다(응답이 하나라도 관찰됐다면 그 수를 넘는다). 확인한 사실로 기록한다.
 
-- [ ] **Step 5: `samples/README.md` 를 다시 쓴다**
+- [x] **Step 5: `samples/README.md` 를 다시 쓴다**
 
 갱신할 것:
 - 결과표 여섯 수치 — **갱신 후 값**으로
@@ -1605,7 +1605,7 @@ Huginn 의 `objectRef` 분포와 맞춘다 — `area2` `0x0052` 와 LID 값이 `
 - 판정 문단에 **151020 의 반전**을 적는다: 1차에서 "Modbus 가 한 프레임도 없다"고 기록한 캡처가 이제 2.3만 관찰을 낸다. 1차의 §10 판정("데이터셋의 Modbus 비중이 얇아 캡처 하나로만 시험됐다")이 **S7 을 붙이자 해소되었는지**를 여기서 다시 판정한다
 - **여전히 미검증인 것**: S7ANY 주소 경로(실캡처 0건), `area1 != 0` 경로, CONTROL 계열(B단계), 비표준 포트 S7
 
-- [ ] **Step 6: 커밋**
+- [x] **Step 6: 커밋**
 
 ```bash
 git add samples
@@ -1621,7 +1621,7 @@ git commit -m "test: S7 을 켠 실캡처 결과를 다시 기록한다"
 - Modify: `docs/superpowers/specs/2026-09-05-huginn-s7comm-design.md` (2차 §9 — 결과 기록)
 - Modify: `README.md` (구조 표의 `decode` 행, 배지의 테스트 수)
 
-- [ ] **Step 1: 프로덕션 소스 변경을 센다**
+- [x] **Step 1: 프로덕션 소스 변경을 센다**
 
 Run:
 ```bash
@@ -1634,7 +1634,7 @@ Expected(합격): 두 파일뿐이고 합계 4줄 안팎
  reconcile/src/main/java/dev/krillin/huginn/reconcile/Protocol.java | 2 +-
 ```
 
-- [ ] **Step 2: 판정을 기록한다 — 통과든 실패든**
+- [x] **Step 2: 판정을 기록한다 — 통과든 실패든**
 
 1차 설계 §10 의 네 번째 조건 아래에 결과를 적는다. **넘었으면 무엇이 왜 바뀌어야 했는지 적는다** — 그게 세 번째 프로토콜을 붙일 사람에게 필요한 정보다. 통과했으면 실제 diff 를 인용해 적는다.
 
@@ -1645,14 +1645,14 @@ Expected(합격): 두 파일뿐이고 합계 4줄 안팎
 - 1200SYM 표기가 tshark 의 `area2`·LID 필드와 맞는가
 - 다중 주장 횟수가 0인가
 
-- [ ] **Step 3: `README.md` 갱신**
+- [x] **Step 3: `README.md` 갱신**
 
 - 구조 표의 `decode/` 행: "Modbus/TCP → Observation" → "Modbus/TCP · S7comm → Observation"
 - 테스트 배지 수 갱신
 - "하지 않는 것" 표에서 **S7comm 행을 옮긴다** — 1차의 "1차에서 증명할 것은 프로토콜 개수가 아니다"는 이제 유효하지 않다. S7comm-plus·Userdata·CONTROL(B단계 전)로 대체한다
 - 주장→테스트 표에 S7 행 추가
 
-- [ ] **Step 4: 기준 파일을 지우고 전체 검증**
+- [x] **Step 4: 기준 파일을 지우고 전체 검증**
 
 ```bash
 rm .huginn-a-base      # Task 0 이 만든 로컬 파일. 남기면 워킹트리가 깨끗하지 않다
@@ -1664,7 +1664,7 @@ Expected: `BUILD SUCCESS`
 Run: `git status -sb`
 Expected: 워킹트리 깨끗
 
-- [ ] **Step 5: 커밋**
+- [x] **Step 5: 커밋**
 
 ```bash
 git add docs README.md
@@ -1675,21 +1675,21 @@ git commit -m "docs: 이음매 판정 결과와 2차 README"
 
 ## 완료 조건
 
-- [ ] `mvn test` 전체 통과
-- [ ] **`ModbusObserverTest`·`EndToEndTest`·`ExamplePolicyTest` 가 한 줄도 고쳐지지 않았다**
+- [x] `mvn test` 전체 통과
+- [x] **`ModbusObserverTest`·`EndToEndTest`·`ExamplePolicyTest` 가 한 줄도 고쳐지지 않았다**
       Run: `git diff --stat $BASE..HEAD -- decode/src/test/java/dev/krillin/huginn/decode/ModbusObserverTest.java cli/src/test` → Expected: 빈 출력
-- [ ] **프로덕션 소스 변경이 `Protocol` 상수 하나와 `Pipeline` 세 줄뿐이다** — 넘었으면 넘은 대로 기록했다
-- [ ] **`decode` 밖 어디에도 S7 지식이 없다**
+- [x] **프로덕션 소스 변경이 `Protocol` 상수 하나와 `Pipeline` 세 줄뿐이다** — 넘었으면 넘은 대로 기록했다
+- [x] **`decode` 밖 어디에도 S7 지식이 없다**
       Run: `grep -rn "TPKT\|COTP\|ROSCTR\|rosctr\|0x32\|1200SYM\|S7Framer" --include=*.java pcap/src/main contract/src/main reconcile/src/main cli/src/main` → Expected: 히트 0건
-- [ ] `ObservationResult`·`Report`·`Huginn`·`contract/`·`pcap/` 이 바뀌지 않았다
-- [ ] **대화 계수 셋의 합이 전체 대화 수다** — 두 프로토콜이 섞인 캡처에서도
-- [ ] **응답(ROSCTR 2·3)이 0건 관찰이다** — 1차의 Modbus 응답 49,787건 불관찰과 같은 확인
-- [ ] **151022 의 Modbus 판정이 1차와 동일하다**(해독 56 · 대상 외 932,655 · UNDECIDABLE 대화 24 · 관찰 48 · 위반 21,028)
-- [ ] S7 관찰 수와 tshark Job 수의 차이를 **네 원인 중 무엇인지 대화 단위로 설명**했다
-- [ ] **어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다** — 65,536 값 전수, 실제 프레이머로
-- [ ] 다중 주장 횟수를 세 캡처에서 측정해 기록했다
-- [ ] 세 정책 파일과 `samples/README.md` 가 갱신되어 기록된 수치가 실제와 맞는다
-- [ ] **1200SYM 표기를 tshark 의 `area2`·LID 필드와 대조했다** — 렌더링 문자열이 아니라 필드로
-- [ ] **빈 본문 테스트가 하나도 없다** — 단언 없는 테스트는 초록으로 통과하면서 아무것도 지키지 않는다
+- [x] `ObservationResult`·`Report`·`Huginn`·`contract/`·`pcap/` 이 바뀌지 않았다
+- [x] **대화 계수 셋의 합이 전체 대화 수다** — 두 프로토콜이 섞인 캡처에서도
+- [x] **응답(ROSCTR 2·3)이 0건 관찰이다** — 1차의 Modbus 응답 49,787건 불관찰과 같은 확인
+- [x] **151022 의 Modbus 판정이 1차와 동일하다**(해독 56 · 대상 외 932,655 · UNDECIDABLE 대화 24 · 관찰 48 · 위반 21,028)
+- [x] S7 관찰 수와 tshark Job 수의 차이를 **네 원인 중 무엇인지 대화 단위로 설명**했다
+- [x] **어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다** — 65,536 값 전수, 실제 프레이머로
+- [x] 다중 주장 횟수를 세 캡처에서 측정해 기록했다
+- [x] 세 정책 파일과 `samples/README.md` 가 갱신되어 기록된 수치가 실제와 맞는다
+- [x] **1200SYM 표기를 tshark 의 `area2`·LID 필드와 대조했다** — 렌더링 문자열이 아니라 필드로
+- [x] **빈 본문 테스트가 하나도 없다** — 단언 없는 테스트는 초록으로 통과하면서 아무것도 지키지 않는다
       Run: `grep -n "() {$" -A1 decode/src/test/java/dev/krillin/huginn/decode/S7*.java | grep -B1 "^\s*}$"` → Expected: 히트 0건
-- [ ] 1차 설계 §10 의 네 번째 조건과 2차 설계 §9 의 다섯 조건이 **전부 판정되어 기록**되었다
+- [x] 1차 설계 §10 의 네 번째 조건과 2차 설계 §9 의 다섯 조건이 **전부 판정되어 기록**되었다
