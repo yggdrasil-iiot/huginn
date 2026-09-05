@@ -28,7 +28,8 @@ class S7DecoderTest {
     private static final byte[] USERDATA = S7Fixtures.userdata(new byte[]{0x00, 0x01, 0x12, 0x04});
 
     private static TcpStream stream(String src, int sport, String dst, int dport, byte[] bytes) {
-        return new TcpStream(Instant.EPOCH, src, sport, dst, dport, bytes, false, false, false);
+        return new TcpStream(Instant.EPOCH, src, sport, dst, dport,
+            bytes.length == 0 ? List.of() : List.of(bytes), 0, false, false);
     }
 
     private ObservationResult observe(TcpStream... streams) {

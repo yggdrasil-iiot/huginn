@@ -25,6 +25,8 @@ record Report(int packetsProcessed,
               int skippedConversations,
               int undecidableConversations,
               int undecidableObservations,
+              long unobservedBytes,
+              long industrialBytes,
               List<Finding> findings) {
 
     String render() {
@@ -35,6 +37,7 @@ record Report(int packetsProcessed,
         out.append(count("대상 외 대화", skippedConversations));
         out.append(count("UNDECIDABLE 대화", undecidableConversations));
         out.append(count("UNDECIDABLE 관찰", undecidableObservations));
+        out.append(unobservedLine());
 
         if (findings.isEmpty()) {
             return out.append("\n위반 없음\n").toString();
@@ -50,6 +53,25 @@ record Report(int packetsProcessed,
                 .append("           ").append(finding.detail()).append('\n');
         }
         return out.toString();
+    }
+
+    /**
+     * 산업 대화에서 못 본 바이트와 그 비율.
+     *
+     * <p>이 줄이 없으면 "해독한 대화 2" 가 그 대화의 대부분을 못 봤다는 사실을 숨긴다 —
+     * 실제로 겪은 실패다. 비율은 <b>소수 한 자리</b>다: 정수로 자르면 0.4% 가 0% 가 되어
+     * 실제 손실을 감춘다.
+     *
+     * <p>숫자 부분만 오른쪽 정렬해 위 여섯 줄과 <b>같은 열에서 끝나게</b> 한다.
+     */
+    private String unobservedLine() {
+        String label = "미관측 바이트";
+        int padding = Math.max(1, LABEL_WIDTH - displayWidth(label));
+        String ratio = String.format(Locale.ROOT, " (%.1f%%)",
+            industrialBytes == 0 ? 0.0 : 100.0 * unobservedBytes / industrialBytes);
+        return "  " + label + " ".repeat(padding)
+            + String.format(Locale.ROOT, "%8s", String.format(Locale.ROOT, "%,d", unobservedBytes))
+            + ratio + "\n";
     }
 
     /**

@@ -38,8 +38,35 @@ final class S7Decoder implements ProtocolDecoder {
 
     @Override
     public StreamEvidence scan(TcpStream stream) {
-        S7FramingResult framing = S7Framer.frames(stream.contiguousPrefix());
-        return new StreamEvidence(stream, framing.frames().size(), framing.undecodedBytes() > 0);
+        RunReader.Reading<S7FramingResult> reading = read(stream);
+        return new StreamEvidence(stream, framesOf(reading).size(), reading.unreadBytes(),
+            reading.capturedBytes(), reading.rejectedRuns(), reading.dirtyRuns());
+    }
+
+    private static RunReader.Reading<S7FramingResult> read(TcpStream stream) {
+        return RunReader.read(stream, S7Framer::frames);
+    }
+
+    /** 수용된 구간들의 프레임을 순서대로 이어 붙인다. */
+    private static List<S7Frame> framesOf(RunReader.Reading<S7FramingResult> reading) {
+        List<S7Frame> frames = new ArrayList<>();
+        for (S7FramingResult one : reading.accepted()) {
+            frames.addAll(one.frames());
+        }
+        return frames;
+    }
+
+    /**
+     * COTP 분할은 <b>구간 수용 여부와 무관한 스트림의 사실</b>이라 거부된 구간의 것도 기여한다.
+     * {@link RunReader} 는 수용된 것만 주므로 구간 전체를 따로 훑는다.
+     */
+    private static boolean anyFragmented(TcpStream stream) {
+        for (byte[] run : stream.runs()) {
+            if (S7Framer.frames(run).fragmented()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -48,10 +75,9 @@ final class S7Decoder implements ProtocolDecoder {
         boolean unread = false;                        // Userdata 또는 COTP 분할
 
         for (StreamEvidence evidence : conversation) {
-            S7FramingResult framing = S7Framer.frames(evidence.stream().contiguousPrefix());
-            unread |= framing.fragmented();
+            unread |= anyFragmented(evidence.stream());
             boolean hasJob = false;
-            for (S7Frame frame : framing.frames()) {
+            for (S7Frame frame : framesOf(read(evidence.stream()))) {
                 if (frame.rosctr() == ROSCTR_JOB) {
                     hasJob = true;
                 } else if (frame.rosctr() == ROSCTR_USERDATA) {
@@ -70,7 +96,7 @@ final class S7Decoder implements ProtocolDecoder {
 
         StreamEvidence client = requestSides.get(0);
         List<Observation> observations = new ArrayList<>();
-        for (S7Frame frame : S7Framer.frames(client.stream().contiguousPrefix()).frames()) {
+        for (S7Frame frame : framesOf(read(client.stream()))) {
             if (frame.rosctr() == ROSCTR_JOB) {
                 observations.add(observationOf(client.stream(), frame));
             }

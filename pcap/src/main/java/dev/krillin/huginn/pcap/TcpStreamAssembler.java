@@ -52,7 +52,7 @@ public final class TcpStreamAssembler {
             Builder builder = entry.getValue();
             result.add(new TcpStream(builder.at, key.sourceAddress(), key.sourcePort(),
                 key.targetAddress(), key.targetPort(),
-                builder.contiguousPrefix(), builder.hasGap(),
+                builder.runs(), builder.missingBytes(),
                 builder.truncated, builder.sawSynOnly));
         }
         return result;
@@ -67,18 +67,18 @@ public final class TcpStreamAssembler {
         boolean sawSynOnly;
         final List<TcpSegment> dataSegments = new ArrayList<>();
 
-        private byte[] prefix;
-        private boolean gap;
+        private List<byte[]> runs;
+        private long missing;
         private boolean computed;
 
-        byte[] contiguousPrefix() {
+        List<byte[]> runs() {
             compute();
-            return prefix;
+            return runs;
         }
 
-        boolean hasGap() {
+        long missingBytes() {
             compute();
-            return gap;
+            return missing;
         }
 
         private void compute() {
@@ -87,24 +87,29 @@ public final class TcpStreamAssembler {
             }
             computed = true;
             if (dataSegments.isEmpty()) {
-                prefix = new byte[0];
-                gap = false;
+                runs = List.of();      // 빈 목록 — 원소로 빈 배열을 넣지 않는다
+                missing = 0;
                 return;
             }
             // stable sort by seq alone — equal-seq ties keep input order, which is what lets
             // "first wins" resolve a retransmission-disguise deterministically.
             dataSegments.sort(java.util.Comparator.comparingLong(TcpSegment::sequence));
 
-            long base = dataSegments.get(0).sequence();
-            long nextSeq = base;
+            List<byte[]> collected = new ArrayList<>();
+            long nextSeq = dataSegments.get(0).sequence();
+            long missed = 0;
             ByteArrayOutputStream out = new ByteArrayOutputStream();
-            boolean sawGap = false;
             for (TcpSegment segment : dataSegments) {
                 long segStart = segment.sequence();
                 long segEnd = segStart + segment.payload().length;
                 if (segStart > nextSeq) {
-                    sawGap = true;
-                    break;
+                    // 구멍이다. 이어붙이지 않고 구간을 끊는다 — 크기는 세어 둔다.
+                    missed += segStart - nextSeq;
+                    if (out.size() > 0) {
+                        collected.add(out.toByteArray());
+                        out = new ByteArrayOutputStream();
+                    }
+                    nextSeq = segStart;
                 }
                 if (segEnd <= nextSeq) {
                     // fully covered by bytes already assembled — first-wins, nothing new here.
@@ -114,8 +119,11 @@ public final class TcpStreamAssembler {
                 out.write(segment.payload(), skip, segment.payload().length - skip);
                 nextSeq = segEnd;
             }
-            prefix = out.toByteArray();
-            gap = sawGap;
+            if (out.size() > 0) {
+                collected.add(out.toByteArray());
+            }
+            runs = List.copyOf(collected);
+            missing = missed;
         }
     }
 }

@@ -19,7 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 class CoexistenceTest {
 
     private static TcpStream stream(String src, int sport, String dst, int dport, byte[] bytes) {
-        return new TcpStream(Instant.EPOCH, src, sport, dst, dport, bytes, false, false, false);
+        return new TcpStream(Instant.EPOCH, src, sport, dst, dport,
+            bytes.length == 0 ? List.of() : List.of(bytes), 0, false, false);
     }
 
     private final TcpStream modbusStream = stream("10.0.1.20", 40000, "10.0.2.11", 502,
@@ -66,6 +67,19 @@ class CoexistenceTest {
         assertEquals(1, d.multiClaimConversations());
         assertEquals(Protocol.MODBUS_TCP, d.result().observations().get(0).protocol(),
             "등록 순서상 첫 번째가 이긴다");
+    }
+
+    @Test
+    void 산업_대화의_못_본_바이트를_센다() {
+        // 분자 = 미해독 + 구멍, 분모 = 받은 것 + 구멍. 대상 외 대화는 양쪽 어디에도 안 든다.
+        byte[] frame = ModbusFixtures.mbap(1, 1, 3, ModbusFixtures.pdu(0, 2));
+        TcpStream gapped = new TcpStream(Instant.EPOCH, "10.0.1.20", 40000, "10.0.2.11", 502,
+            List.of(frame, frame), 500, false, false);   // 구간 둘 사이에 구멍 500 바이트
+
+        ObservationResult r = TrafficObserver.observe(List.of(gapped, sshStream));
+
+        assertEquals(500, r.unobservedBytes(), "구멍은 못 본 바이트다 — 둘째 구간은 깨끗해서 수용된다");
+        assertEquals(frame.length * 2L + 500, r.industrialBytes(), "SSH 대화는 분모에도 안 든다");
     }
 
     @Test

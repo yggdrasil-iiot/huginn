@@ -52,14 +52,14 @@ class TcpStreamAssemblerTest {
     void 순서대로_온_세그먼트를_이어붙인다() {
         TcpStream s = assemble(seg(100, "abc"), seg(103, "def"));
         assertFalse(s.hasGap());
-        assertArrayEquals("abcdef".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abcdef".getBytes(), s.runs().get(0));
     }
 
     @Test
     void 순서가_뒤바뀌어도_seq로_정렬한다() {
         // at 도 함께 못박는다 — "입력 순서상 첫 번째" 로 구현하면 여기서 뒤집힌다.
         TcpStream s = assemble(seg(103, "def"), seg(100, "abc"));
-        assertArrayEquals("abcdef".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abcdef".getBytes(), s.runs().get(0));
         assertEquals(seg(100, "abc").at(), s.at(), "가장 이른 시각이지 입력 순서상 첫 번째가 아니다");
     }
 
@@ -71,7 +71,7 @@ class TcpStreamAssemblerTest {
         // 그리고 SYN 의 seq 가 base 후보로 새어 들어가면 안 된다. 들어가면 base=1000 이 되어
         // 데이터가 오프셋 1 에 놓이고 1바이트 갭이 난다 — 길이 0 제외 규칙이 무력화된다.
         assertFalse(s.hasGap());
-        assertArrayEquals("abc".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abc".getBytes(), s.runs().get(0));
     }
 
     @Test
@@ -86,7 +86,7 @@ class TcpStreamAssemblerTest {
         // base seq 후보가 하나도 없다. 예외가 아니라 빈 스트림이어야 한다.
         TcpStream s = assemble(syn(1000));
         assertTrue(s.sawSynOnly());
-        assertEquals(0, s.contiguousPrefix().length);
+        assertTrue(s.runs().isEmpty(), "데이터가 없으면 구간도 없다 — 빈 배열을 원소로 넣지 않는다");
         assertFalse(s.hasGap());
         assertEquals(syn(1000).at(), s.at(), "at 후보가 없으면 null 이 되어서는 안 된다");
     }
@@ -97,7 +97,7 @@ class TcpStreamAssemblerTest {
         // 1바이트 갭 → 전량 UNDECIDABLE 이 된다.
         TcpStream s = assemble(seg(1000, ""), seg(1001, "abc"));
         assertFalse(s.hasGap());
-        assertArrayEquals("abc".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abc".getBytes(), s.runs().get(0));
     }
 
     @Test
@@ -113,21 +113,23 @@ class TcpStreamAssemblerTest {
         // 조용히 이어붙이면 프레임 경계가 어긋나 엉뚱한 함수코드를 읽는다.
         TcpStream s = assemble(seg(100, "abc"), seg(200, "xyz"));
         assertTrue(s.hasGap());
-        assertArrayEquals("abc".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abc".getBytes(), s.runs().get(0));
+        assertArrayEquals("xyz".getBytes(), s.runs().get(1),
+            "갭 이후도 버리지 않고 별도 구간으로 남긴다 — 이어붙이지는 않는다");
     }
 
     @Test
     void 캡처가_대화_중간부터_시작해도_최소_seq를_기준으로_삼는다() {
         TcpStream s = assemble(seg(500000, "abc"), seg(500003, "def"));
         assertFalse(s.hasGap());
-        assertArrayEquals("abcdef".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abcdef".getBytes(), s.runs().get(0));
     }
 
     @Test
     void 완전_중복_세그먼트는_한_번만_반영한다() {
         TcpStream s = assemble(seg(100, "abc"), seg(100, "abc"));
         assertFalse(s.hasGap());
-        assertArrayEquals("abc".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abc".getBytes(), s.runs().get(0));
     }
 
     @Test
@@ -136,7 +138,7 @@ class TcpStreamAssemblerTest {
         // base=100. 첫 세그먼트가 오프셋 0~4, 둘째는 2~6 을 차지한다.
         // 2·3·4 는 이미 찼으므로 지고, 5·6 만 X 가 된다 → 7바이트.
         TcpStream s = assemble(seg(100, "abcde"), seg(102, "XXXXX"));
-        assertArrayEquals("abcdeXX".getBytes(), s.contiguousPrefix());
+        assertArrayEquals("abcdeXX".getBytes(), s.runs().get(0));
     }
 
     @Test
@@ -182,6 +184,31 @@ class TcpStreamAssemblerTest {
         assertEquals(a.stream().map(TcpStream::sourcePort).toList(),
             b.stream().map(TcpStream::sourcePort).toList());
         for (int i = 0; i < a.size(); i++)
-            assertArrayEquals(a.get(i).contiguousPrefix(), b.get(i).contiguousPrefix());
+            assertArrayEquals(a.get(i).runs().get(0), b.get(i).runs().get(0));
+    }
+
+    @Test
+    void 구멍의_크기를_센다() {
+        // seq 103 부터 199 까지 97 바이트가 비었다. 조립기는 이 값을 이미 알면서 버리고 있었다.
+        TcpStream s = assemble(seg(100, "abc"), seg(200, "xyz"));
+
+        assertEquals(97, s.missingBytes());
+    }
+
+    @Test
+    void 구멍이_여럿이면_크기를_합한다() {
+        TcpStream s = assemble(seg(100, "abc"), seg(200, "xyz"), seg(400, "pq"));
+
+        assertEquals(3, s.runs().size());
+        assertEquals(97 + 197, s.missingBytes());
+    }
+
+    @Test
+    void 데이터가_없는_스트림은_구멍도_없다() {
+        TcpStream s = assemble(syn(1000));
+
+        assertTrue(s.runs().isEmpty());
+        assertEquals(0, s.missingBytes());
+        assertFalse(s.hasGap());
     }
 }

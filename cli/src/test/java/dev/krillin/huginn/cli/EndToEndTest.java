@@ -131,6 +131,17 @@ class EndToEndTest {
     }
 
     @Test
+    void 리포트는_못_본_바이트를_비율과_함께_낸다() {
+        // 이 줄이 없으면 "해독한 대화 2" 가 그 대화의 대부분을 못 봤다는 사실을 숨긴다.
+        String out = Pipeline.run(declaredReadCapture(), POLICY).render();
+
+        assertTrue(out.contains("미관측 바이트"));
+        String line = out.lines().filter(l -> l.contains("미관측 바이트")).findFirst().orElseThrow();
+        assertTrue(line.matches(".*\\d+\\.\\d%\\).*"),
+            "비율은 소수 한 자리다: " + line);
+    }
+
+    @Test
     void 비산업_트래픽은_UNDECIDABLE이_아니라_대상_외로_센다() {
         // 이 구분이 없으면 커버리지 지표가 캡처의 SSH·HTTP 양에 지배된다.
         byte[] ssh = "SSH-2.0-OpenSSH_9.0\r\n".getBytes(StandardCharsets.US_ASCII);
