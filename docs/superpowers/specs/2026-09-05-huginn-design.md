@@ -90,6 +90,8 @@ peers:
     address: 10.0.1.20
   - id: plc-mixer
     address: 10.0.2.11
+  - id: historian
+    address: 10.0.1.50
 allowed:
   - from: hmi-01
     to: plc-mixer
@@ -112,13 +114,15 @@ allowed:
 ```java
 record Finding(
     Severity    severity,   // 쓰기·제어가 읽기보다 높다
-    Kind        kind,       // UNDECLARED_PEER | UNDECLARED_PROTOCOL | UNDECLARED_ACCESS
+    Kind        kind,       // 1차는 UNDECLARED 한 종류로 시작한다 (아래)
     Observation evidence,   // 무엇을 보고 그렇게 판단했는가
     String      detail
 )
 ```
 
 모든 Finding 은 **근거가 되는 관찰을 함께 들고 다닌다.** 근거 없는 경보는 운영자가 무시하게 된다.
+
+`Kind` 를 `UNDECLARED_PEER` · `UNDECLARED_PROTOCOL` · `UNDECLARED_ACCESS` 로 나누는 것도 가능하지만 **1차는 `UNDECLARED` 하나로 시작한다.** 근거가 되는 `Observation` 이 이미 무엇이 어긋났는지를 담고 있어 세분화의 실익이 아직 없다. 운영에서 분류가 필요하다는 근거가 생기면 그때 나눈다.
 
 ### 지키는 원칙
 
@@ -130,11 +134,24 @@ record Finding(
 
 **④ 모르는 함수코드는 `UNDECIDABLE` 이다.** 조용히 READ 로 치지 않는다.
 
+**⑤ 응답은 관찰하지 않는다 — 요청만 `Observation` 이 된다.** 스트림은 방향별로 분리되므로 응답은 출발지·목적지가 뒤집힌 채로 온다. 응답까지 관찰하면 정책이 `A → B` 만 선언한 정상 통신에서 **매 응답마다 위반이 뜬다.** 응답 PDU 에는 시작 주소가 없어 `objectRef` 도 만들 수 없다는 점이 같은 결론을 가리킨다. 서버 쪽을 판정할 수 없는 스트림은 `UNDECIDABLE` 이다.
+
+**⑥ 산업 프로토콜이 아닌 스트림은 `UNDECIDABLE` 이 아니라 대상 외다.** 캡처에는 SSH·HTTP 등이 섞여 있다. 유효 프레임을 **한 개도 못 뽑은 스트림**은 조용히 건너뛰고, **한 개 이상 뽑은 스트림 안의 잔여 바이트만** `UNDECIDABLE` 로 센다. 이렇게 하지 않으면 `UNDECIDABLE` 수치가 캡처의 비산업 트래픽 양에 지배되어 §10 의 반증 조건이 프로토콜 선택과 무관하게 발동한다. ②의 "조용히 넘기지 않는다" 와 충돌하지 않는다 — ②는 **우리가 다루기로 한 프로토콜 안에서** 못 읽은 것을 말한다.
+
 ### Access 매핑
 
-| | READ | WRITE | CONTROL |
-|---|---|---|---|
-| Modbus/TCP | 1 · 2 · 3 · 4 | 5 · 6 · 15 · 16 · 22 · 23 | 8(진단) · 43(장치식별) |
+| | 함수코드 |
+|---|---|
+| **READ** | 1 · 2 · 3 · 4 · 7 · 11 · 12 · 17 · 20(Read File Record) · 24(Read FIFO) |
+| **WRITE** | 5 · 6 · 15 · 16 · 22 · 23 · **21(Write File Record)** |
+| **CONTROL** | 8(Diagnostics — 서브함수에 Restart·Force Listen Only 가 있어 보수적으로 분류) |
+| **UNDECIDABLE** | 그 외 전부. **43(Encapsulated Interface Transport) 포함** |
+
+**43 을 CONTROL 로 두지 않는다.** 실제 의미는 MEI Type 바이트가 정한다 — MEI 14 는 Read Device Identification(**읽기**), MEI 13(CANopen)은 읽기·쓰기를 모두 실어 나른다. MEI 를 보지 않고 CONTROL 로 올리면 정상적인 장치식별 조회가 최고 심각도 위반이 된다. 1차는 MEI 를 파싱하지 않으므로 `UNDECIDABLE` 이 정직한 값이다.
+
+**21 을 빠뜨리면 안 된다.** `UNDECIDABLE` 은 Finding 을 만들지 않으므로, 21 이 매핑에 없으면 **미등록 장비의 파일 레코드 쓰기가 보고되지 않는다.**
+
+**최상위 비트가 선 코드(`0x80` 이상)는 예외 응답이다.** ⑤에 따라 응답은 관찰하지 않으므로 여기서 다루지 않는다.
 
 *(참고 — 2차에 붙일 S7comm: 함수 4 = READ, 함수 5 = WRITE, `0x28`·`0x29`(PLC Start/Stop) = CONTROL)*
 
