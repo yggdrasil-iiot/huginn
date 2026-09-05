@@ -54,7 +54,7 @@ Huginn은 그 답을 만든다. 신화에서 후긴과 무닌은 한 쌍이고, 
 ```
 huginn/
   pcap/       pcap 파일 → 패킷. 링크레이어·IPv4·TCP 스트림 재조립
-  decode/     Modbus/TCP · S7comm → Observation
+  decode/     Modbus/TCP → Observation
   contract/   CommunicationPolicy 읽기
   reconcile/  관찰 ↔ 선언 대사 → Finding
   cli/        진입점과 리포트
@@ -97,7 +97,7 @@ allowed:
     access: [READ, WRITE]
   - from: historian
     to: plc-mixer
-    protocol: S7COMM
+    protocol: MODBUS_TCP
     access: [READ]          # 쓰기는 허용하지 않는다
 ```
 
