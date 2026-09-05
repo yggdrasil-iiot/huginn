@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.Set;
 
 import dev.krillin.huginn.reconcile.Access;
+import dev.krillin.huginn.reconcile.PolicyView;
 import dev.krillin.huginn.reconcile.Protocol;
 
 /**
@@ -11,7 +12,7 @@ import dev.krillin.huginn.reconcile.Protocol;
  *
  * deny-by-default: 조회표에 없으면 허용하지 않는다.
  */
-public class CommunicationPolicy {
+public class CommunicationPolicy implements PolicyView {
 
     /** (from 주소, to 주소, 프로토콜) → 허용된 access 집합. */
     record Key(String from, String to, Protocol protocol) {}
