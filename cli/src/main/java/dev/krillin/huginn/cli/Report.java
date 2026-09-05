@@ -52,9 +52,34 @@ record Report(int packetsProcessed,
         return out.toString();
     }
 
-    /** 천 단위 구분자는 Locale.ROOT 로 낸다 — 기본 로케일에 맡기면 리포트가 환경을 탄다. */
+    /**
+     * 천 단위 구분자는 Locale.ROOT 로 낸다 — 기본 로케일에 맡기면 리포트가 환경을 탄다.
+     * <p>여백은 글자 수가 아니라 <b>표시 폭</b>으로 맞춘다. {@code %-18s} 는 한글 한 자를 1 로
+     * 세지만 콘솔에서는 2 칸을 차지해, 라벨마다 한글 비율이 다른 이 표가 어긋난다.
+     */
     private static String count(String label, int value) {
-        return String.format(Locale.ROOT, "  %-18s %8s", label, String.format(Locale.ROOT, "%,d", value))
-            + "\n";
+        int padding = Math.max(1, LABEL_WIDTH - displayWidth(label));
+        return "  " + label + " ".repeat(padding)
+            + String.format(Locale.ROOT, "%8s", String.format(Locale.ROOT, "%,d", value)) + "\n";
+    }
+
+    private static final int LABEL_WIDTH = 20;
+
+    /** 한중일 문자와 한글은 콘솔에서 두 칸을 차지한다. 나머지는 한 칸으로 본다. */
+    private static int displayWidth(String text) {
+        int width = 0;
+        for (int i = 0; i < text.length(); i++) {
+            width += isWide(text.charAt(i)) ? 2 : 1;
+        }
+        return width;
+    }
+
+    private static boolean isWide(char c) {
+        Character.UnicodeBlock block = Character.UnicodeBlock.of(c);
+        return block == Character.UnicodeBlock.HANGUL_SYLLABLES
+            || block == Character.UnicodeBlock.HANGUL_JAMO
+            || block == Character.UnicodeBlock.HANGUL_COMPATIBILITY_JAMO
+            || block == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+            || block == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION;
     }
 }

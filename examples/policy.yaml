@@ -1,0 +1,24 @@
+# Huginn 통신 정책 — deny-by-default. 여기 적힌 것만 허용이고 나머지는 전부 위반이다.
+#
+# 이 파일은 예시이자 회귀 가드다. cli 의 ExamplePolicyTest 가 실제로 읽어 파싱하므로,
+# 로더 계약이 바뀌면 이 파일이 먼저 깨진다.
+version: 1
+
+peers:
+  - id: hmi-01
+    address: 10.0.1.20
+  - id: plc-mixer
+    address: 10.0.2.11
+  - id: historian
+    address: 10.0.1.50
+
+allowed:
+  - from: hmi-01
+    to: plc-mixer
+    protocol: MODBUS_TCP
+    access: [READ, WRITE]
+
+  - from: historian
+    to: plc-mixer
+    protocol: MODBUS_TCP
+    access: [READ]          # 쓰기는 허용하지 않는다 — 히스토리안은 읽기만 한다
