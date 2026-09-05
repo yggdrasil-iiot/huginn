@@ -21,7 +21,8 @@ import java.util.Map;
  */
 public final class TrafficObserver {
 
-    private static final List<ProtocolDecoder> DECODERS = List.of(new ModbusDecoder());
+    private static final List<ProtocolDecoder> DECODERS =
+        List.of(new ModbusDecoder(), new S7Decoder());
 
     private TrafficObserver() {
     }
