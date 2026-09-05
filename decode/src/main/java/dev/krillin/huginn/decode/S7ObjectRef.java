@@ -1,6 +1,7 @@
 package dev.krillin.huginn.decode;
 
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * 요청이 건드린 대상을 사람이 읽는 표기로 옮긴다 — 예: {@code "sym:m/16"} · {@code "db1.dbx20.0"}.
@@ -27,6 +28,25 @@ public final class S7ObjectRef {
     /** 이름을 아는 root area 는 이것 하나뿐이다 — 실캡처에 나타난 유일한 값이다. */
     private static final int AREA2_FLAGS = 0x0052;
 
+    /**
+     * 제어 함수의 이름표. PDU 에 주소가 없어 {@code fc:41} 로는 운영자가 무엇이 일어났는지
+     * 모른다. <b>파싱이 아니라 정적 이름이라 틀릴 여지가 없고</b>, 대상(어떤 블록인지)은
+     * 여전히 말하지 않는다 — 이름이 대상을 아는 척하면 근거가 아니라 추측이 된다.
+     *
+     * <p><b>주의:</b> {@code 0x1C}·{@code 0x1D} 는 아래 S7ANY 의 area 코드(카운터 C·타이머 T)와
+     * 값이 같다. 자리가 달라(함수코드 대 area) 충돌하지 않지만 같은 파일에 두 표가 있으므로
+     * 헷갈리지 않게 적어 둔다.
+     */
+    private static final Map<Integer, String> CONTROL_NAMES = Map.of(
+        0x28, "plc-control",
+        0x29, "plc-stop",
+        0x1A, "download-request",
+        0x1B, "download-block",
+        0x1C, "download-end",
+        0x1D, "upload-start",
+        0x1E, "upload",
+        0x1F, "upload-end");
+
     private S7ObjectRef() {
     }
 
@@ -36,6 +56,10 @@ public final class S7ObjectRef {
             return functionOnly(parameter);
         }
         int function = parameter[0] & 0xFF;
+        String controlName = CONTROL_NAMES.get(function);
+        if (controlName != null) {
+            return controlName;
+        }
         if (function != READ_VAR && function != WRITE_VAR) {
             return functionOnly(parameter);
         }

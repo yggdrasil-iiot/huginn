@@ -146,6 +146,21 @@ class S7DecoderTest {
     }
 
     @Test
+    void PLC_정지와_블록_다운로드는_CONTROL_관찰이_된다() {
+        // S7 에서 가장 중요한 우회 신호다. 서브서비스를 읽지 않으므로 이름까지만 적는다.
+        ObservationResult r = observe(stream(A, 3000, PLC, 102, S7Fixtures.concat(
+            S7Fixtures.job(S7Fixtures.plcStop()),
+            S7Fixtures.job(S7Fixtures.downloadRequest()))));
+
+        assertEquals(2, r.observations().size());
+        assertEquals(Access.CONTROL, r.observations().get(0).access());
+        assertEquals("plc-stop", r.observations().get(0).objectRef());
+        assertEquals(Access.CONTROL, r.observations().get(1).access());
+        assertEquals("download-request", r.observations().get(1).objectRef());
+        assertEquals(1, r.decodedConversations());
+    }
+
+    @Test
     void 포트가_102가_아니어도_해독한다() {
         // S7 도 Modbus 와 같다 — 우회하는 사람은 포트를 바꾼다.
         ObservationResult r = observe(stream(HMI, 50001, PLC, 40102, READ_JOB));

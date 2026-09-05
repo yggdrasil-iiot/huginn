@@ -11,15 +11,27 @@ import java.util.Map;
  * 재사용한다"고 적어둔 그것이다. <b>이 목록 자체가 문서</b>이며, 표에 없는 함수코드는 전부
  * {@link Access#UNDECIDABLE} 이다.
  *
- * <p><b>A단계에서는 제어 계열이 아직 UNDECIDABLE 이다.</b> {@code 0x28} PLC Control ·
- * {@code 0x29} PLC Stop · {@code 0x1A}~{@code 0x1F} 블록 다운로드/업로드는 B단계에서
- * CONTROL 로 올린다. 검증 없이 미리 올리면 확인되지 않은 판정이 리포트에 나간다.
+ * <p><b>제어 계열은 서브서비스를 보지 않고 통째로 CONTROL 이다.</b> {@code 0x28} 의 실제 동작은
+ * 가변길이 서비스 문자열({@code P_PROGRAM}·{@code _INSE})에 있고 블록 함수의 대상 블록은
+ * 파일명 형태의 식별자에 있는데, 둘 다 읽지 않는다 — 실캡처가 없어 대조할 수 없기 때문이다.
+ * 1차가 Modbus FC 8(Diagnostics)을 서브함수 없이 올린 것과 같은 보수적 판단이며,
+ * <b>같은 이유로 과대분류인 면이 있다.</b>
  */
 public final class S7Access {
 
-    private static final Map<Integer, Access> BY_FUNCTION_CODE = Map.of(
-        0x04, Access.READ,     // Read Var
-        0x05, Access.WRITE);   // Write Var
+    private static final Map<Integer, Access> BY_FUNCTION_CODE = Map.ofEntries(
+        Map.entry(0x04, Access.READ),      // Read Var
+        Map.entry(0x05, Access.WRITE),     // Write Var
+
+        // PLC 정지는 눈에 띄지만, 로직을 조용히 바꾸고 가는 블록 다운로드가 실제 위험이다.
+        Map.entry(0x28, Access.CONTROL),   // PLC Control
+        Map.entry(0x29, Access.CONTROL),   // PLC Stop
+        Map.entry(0x1A, Access.CONTROL),   // Request download
+        Map.entry(0x1B, Access.CONTROL),   // Download block
+        Map.entry(0x1C, Access.CONTROL),   // Download ended
+        Map.entry(0x1D, Access.CONTROL),   // Start upload
+        Map.entry(0x1E, Access.CONTROL),   // Upload
+        Map.entry(0x1F, Access.CONTROL));  // End upload
 
     private S7Access() {
     }
