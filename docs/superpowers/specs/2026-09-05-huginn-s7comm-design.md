@@ -1,6 +1,6 @@
 # Huginn 2차 — S7comm 해독
 
-- 상태: 초안 rev4 (2026-09-05) — 3차 리뷰 반영. 비-S7 TPKT 처리·진단 읽기 경로·잔여 모순 정리
+- 상태: 초안 rev5 (2026-09-05) — 4차 리뷰 반영. 진단의 생산 경로와 잔여 표현 정리
 - 선행: [1차 설계](2026-09-05-huginn-design.md) · 저장소 `yggdrasil-iiot/huginn` · Java 17 · Apache-2.0
 
 ---
@@ -102,11 +102,17 @@ record StreamEvidence(TcpStream stream, int frameCount, boolean leftoverBytes) {
  * @param requestObservations 요청 프레임에서 만든 관찰. 응답은 들어가지 않는다(1차 §5-⑤)
  * @param client              요청을 보낸 방향의 **StreamEvidence**. null 이면 판정 불가다
  * @param tailUndecidable     프레임은 뽑았으나 해석하지 않은 것이 대화 어딘가에 있는가.
- *                            S7 이 Userdata(ROSCTR 7)를 만났을 때 세운다 — 그 프레임은 **응답
- *                            방향에도 실리므로** client 의 잔여만 보는 규칙으로는 잡히지 않는다.
+ *                            S7 이 Userdata(ROSCTR 7)나 COTP 분할을 만났을 때 세운다 — 그것들은
+ *                            **응답 방향에도 실리므로** client 의 잔여만 보는 규칙으로는 잡히지 않는다.
  *                            Modbus 는 항상 false 다: 그쪽 잔여·갭·절단은 client 증거로 이미 흐른다
+ * @param bothDirectionsRequested  client == null 인 이유가 **요청 방향이 둘**이어서인가.
+ *                            0 개(응답만 잡힘·Userdata 만)와 2 개(한 4-tuple 에 연결이 둘)를
+ *                            순회기는 구별할 수 없다 — 둘 다 frameCount > 0 이기 때문이다.
+ *                            해독기만 아는 사실이므로 해독기가 싣는다. S7 은 Job 방향이 2 개일 때,
+ *                            Modbus 는 R1(양쪽이 같은 형태)일 때 세운다. client != null 이면 false
  */
-record Decoded(List<Observation> requestObservations, StreamEvidence client, boolean tailUndecidable) { }
+record Decoded(List<Observation> requestObservations, StreamEvidence client,
+               boolean tailUndecidable, boolean bothDirectionsRequested) { }
 ```
 
 `Decoded`가 `TcpStream`이 아니라 `StreamEvidence`를 돌려주는 것이 중요하다. `TcpStream`은 `byte[] contiguousPrefix`를 컴포넌트로 가진 record라 **`equals`가 배열 참조 비교**다. 순회기가 클라이언트 스트림을 증거 목록에 되짚으려 하면 동일 인스턴스가 흐를 때만 우연히 동작한다. 증거를 그대로 돌려받으면 되짚을 일이 없다.
@@ -155,7 +161,7 @@ record Diagnosed(ObservationResult result, int multiClaimConversations,
    - `requestObservations`가 비었으면 → `UNDECIDABLE` 관찰 1건, `undecidableConversations`++. 이 관찰은 **`client`의 `at`·`source`·`target`** 을 쓴다
    - 관찰이 1건 이상 → `decodedConversations`++, 그리고 **`client`에 잔여·갭·절단이 있거나 `Decoded.tailUndecidable`이 참이면** `UNDECIDABLE` 관찰을 **하나 더** 붙인다(대화 계수는 건드리지 않는다)
 
-순회기가 만드는 `UNDECIDABLE` 관찰 셋은 모두 **`protocol` = 이긴 해독기의 `protocol()`, `objectRef` = `"-"`** 다(1차 `ModbusObserver.undecidableOf`와 같다).
+순회기가 만드는 `UNDECIDABLE` 관찰 셋은 모두 **`protocol` = 이긴 해독기의 `protocol()`, `objectRef` = `"-"`** 다(1차 `ModbusObserver.undecidableOf`와 같다). **세 번째(꼬리) 관찰의 `at`·`source`·`target`은 `client`의 것을 쓴다** — `tailUndecidable`이 서버 방향의 사건에서 비롯됐더라도 그렇다. 1차와 같은 선택이며, 근거 줄에 찍히는 주소가 구현자 재량이 되지 않게 한다.
 
 순회가 한 번뿐이고 모든 분기가 정확히 하나의 계수를 올리므로 **"세 계수의 합 = 전체 대화 수"가 구조적으로 유지된다.**
 
@@ -165,7 +171,7 @@ record Diagnosed(ObservationResult result, int multiClaimConversations,
 
 "두 해독기가 같은 대화를 주장하면 모순"이라는 분기를 rev1에 뒀다가 뺐다. 두 가지 이유다.
 
-**첫째, 이 조합에서는 원리적으로 일어날 수 없다.** MBAP는 오프셋 0의 바이트 2~3(프로토콜 ID)이 `0x0000`이어야 하고, TPKT는 같은 자리가 전체 길이(최소 7)여야 한다. 두 조건은 동시에 참일 수 없고, **두 프레이머 모두 오프셋 0에서 유효 프레임을 얻어야 주장하므로**(재동기화하지 않는다) 한 스트림이 둘 다에 걸리지 않는다.
+**첫째, 이 조합에서는 원리적으로 일어날 수 없다.** MBAP는 오프셋 0의 바이트 2~3(프로토콜 ID)이 `0x0000`이어야 하고, TPKT는 같은 자리가 전체 길이(최소 7)여야 한다. 두 조건은 동시에 참일 수 없고, **두 프레이머 모두 오프셋 0에서 자기 프레이밍이 성립해야 주장하므로**(재동기화하지 않는다) 한 스트림이 둘 다에 걸리지 않는다. S7 쪽은 오프셋 0의 프레임이 S7이 아니어도(§4의 CR 소비) 주장할 수 있지만, 그때도 **오프셋 0에 온전한 TPKT가 있어야 한다** — 바이트 2~3에 대한 모순은 그대로다.
 
 **둘째, 그 분기는 만들 수 없는 관찰을 요구한다.** `Observation.protocol`은 필수인데 충돌한 대화는 어느 프로토콜도 아니다. `Protocol.UNKNOWN`을 추가하면 `reconcile`이 한 번 더 바뀌어, 이음매와 무관한 이유로 §7이 실패한다.
 
@@ -362,9 +368,9 @@ tshark -r samples/4SICS-GeekLounge-<n>.pcap -Y "s7comm" \
 | Modbus 판정 불변(151022) | Modbus만 등록한 환경변수 회귀 테스트(아래) |
 | 두 해독기가 한 대화를 주장한 횟수 | **둘 다 등록한** 두 번째 환경변수 테스트에서 `observeWithDiagnostics`로 읽는다 |
 | 양쪽 방향에 모두 요청이 있는 대화 수 | 같은 진단 값(`bothDirectionRequestConversations`) |
-| Job 수와 관찰 수의 차이를 대화 단위로 설명 | 같은 테스트에서 대화별로 뽑아 기록한다 |
+| Job 수와 관찰 수의 차이를 대화 단위로 설명 | `Diagnosed`는 정수 둘과 평평한 관찰 목록만 낸다. 관찰은 4-tuple을 들고 있으므로 **엔드포인트 쌍으로 묶어** tshark의 스트림별 Job 수와 맞춘다. 프레임 수는 순회기 밖으로 나오지 않으므로 갭·절단 원인은 이 대조로 좁힌 뒤 해당 대화만 따로 들여다본다 |
 
-**두 수치 모두 0일 것으로 예상하지만 확인 전에는 모른다.** 0이 아니면 §9의 반증 조건이 발동한다.
+**두 수치 모두 0일 것으로 예상하지만 확인 전에는 모른다.** 다만 둘의 무게가 다르다 — 다중 주장이 0이 아니면 §9의 반증 조건이 발동하지만, **양방향 요청 대화가 0이 아닌 것은 반증이 아니라** Job 수와 관찰 수가 벌어지는 정당한 원인(위 둘째 항목)이다. 세어서 차이를 설명하는 데 쓴다.
 
 **응답(ROSCTR 2·3)은 0건 관찰이어야 한다.** 1차에서 Modbus 응답 49,787건이 하나도 관찰되지 않은 것과 같은 확인이며, §5-⑤를 S7에서 다시 증명하는 자리다.
 
