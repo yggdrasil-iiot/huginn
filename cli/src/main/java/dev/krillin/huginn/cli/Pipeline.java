@@ -48,6 +48,7 @@ final class Pipeline {
             reconciled.undecidableCount(),
             observed.unobservedBytes(),
             observed.industrialBytes(),
+            observed.byProtocol(),
             reconciled.findings());
     }
 }

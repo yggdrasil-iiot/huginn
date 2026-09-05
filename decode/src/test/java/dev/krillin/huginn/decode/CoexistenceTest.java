@@ -83,6 +83,36 @@ class CoexistenceTest {
     }
 
     @Test
+    void 프로토콜별_커버리지가_합산과_맞는다() {
+        // 2차 설계 §6 이 "99% S7 인 캡처에서 Modbus 가 얼마나 얇은지 알 수 없다" 고 적고 미룬 것.
+        ObservationResult r = TrafficObserver.observe(List.of(modbusStream, s7Stream, sshStream));
+
+        assertEquals(2, r.byProtocol().size(), "등록된 해독기마다 한 행");
+        assertEquals(Protocol.MODBUS_TCP, r.byProtocol().get(0).protocol(), "행 순서는 등록 순서다");
+        assertEquals(Protocol.S7COMM, r.byProtocol().get(1).protocol());
+
+        int decoded = r.byProtocol().stream().mapToInt(ProtocolCoverage::decodedConversations).sum();
+        int observations = r.byProtocol().stream().mapToInt(ProtocolCoverage::observations).sum();
+        long unobserved = r.byProtocol().stream().mapToLong(ProtocolCoverage::unobservedBytes).sum();
+
+        assertEquals(r.decodedConversations(), decoded, "행의 합이 합산과 같아야 한다");
+        assertEquals(r.observations().size(), observations);
+        assertEquals(r.unobservedBytes(), unobserved);
+    }
+
+    @Test
+    void 대화를_하나도_주장하지_못한_프로토콜도_행을_낸다() {
+        // 151020 의 MODBUS_TCP 0 이야말로 "이 캡처엔 Modbus 가 한 프레임도 없다" 를
+        // 리포트가 직접 말하는 것이다 — 1차는 그걸 산문으로만 적었다.
+        ObservationResult r = TrafficObserver.observe(List.of(s7Stream));
+
+        assertEquals(2, r.byProtocol().size());
+        assertEquals(0, r.byProtocol().get(0).decodedConversations());
+        assertEquals(0, r.byProtocol().get(0).observations());
+        assertEquals(1, r.byProtocol().get(1).decodedConversations());
+    }
+
+    @Test
     void 어떤_바이트열도_두_프레이머에_동시에_걸리지_않는다() {
         // 오프셋 0 의 바이트 2~3 은 MBAP 에선 프로토콜 ID(반드시 0), TPKT 에선 전체 길이(>= 7)다.
         // 두 프레이머가 **서로 모순되게** 제약하는 유일한 자리이므로 그 65,536 개 값을 전부 돌린다.

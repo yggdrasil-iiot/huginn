@@ -20,11 +20,15 @@ import java.util.List;
  * @param industrialBytes          그 대화들이 실제로 오갔던 바이트(받은 것 + 캡처에 없던 것).
  *                                 대상 외 대화는 분자·분모 어디에도 들지 않는다 — 넣으면 지표가
  *                                 SSH·DNS 양에 지배된다
+ * @param byProtocol               프로토콜별 커버리지. <b>해독기 등록 순서</b>이며 대화를 하나도
+ *                                 주장하지 못한 프로토콜도 0 행으로 낸다 — 없다는 사실도 정보다.
+ *                                 순서가 고정돼야 "같은 입력에 같은 리포트" 가 유지된다
  */
 public record ObservationResult(List<Observation> observations,
                                 int decodedConversations,
                                 int undecidableConversations,
                                 int skippedConversations,
                                 long unobservedBytes,
-                                long industrialBytes) {
+                                long industrialBytes,
+                                List<ProtocolCoverage> byProtocol) {
 }

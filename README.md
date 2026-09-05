@@ -2,7 +2,7 @@
 
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
 ![Build](https://img.shields.io/badge/build-Maven%20multi--module-blue)
-![Tests](https://img.shields.io/badge/tests-239-brightgreen)
+![Tests](https://img.shields.io/badge/tests-243-brightgreen)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 **[Yggdrasil](https://github.com/yggdrasil-iiot) IIoT 스파인의 관찰·대사 축 — 선언한 것과 실제로 오간 것을 맞춰 본다.** Modbus/TCP 와 S7comm 을 읽는다.
@@ -44,7 +44,7 @@ allowed:
     access: [READ, WRITE]
 ```
 
-리포트는 위반과 **커버리지 일곱 수치**를 함께 낸다. 커버리지가 없으면 "위반 0 건" 이 *깨끗하다* 는 뜻인지 *거의 못 읽었다* 는 뜻인지 알 수 없다.
+리포트는 위반과 **커버리지 일곱 수치**, 그리고 **프로토콜별 표**를 함께 낸다. 커버리지가 없으면 "위반 0 건" 이 *깨끗하다* 는 뜻인지 *거의 못 읽었다* 는 뜻인지 알 수 없다.
 
 ```
 Huginn — 통신 대사 결과
@@ -55,6 +55,10 @@ Huginn — 통신 대사 결과
   UNDECIDABLE 대화           1
   UNDECIDABLE 관찰           4
   미관측 바이트         85,525 (2.4%)
+
+  프로토콜        해독 대화  UNDEC 대화        관찰  UNDEC 관찰       미관측 바이트
+  MODBUS_TCP             0           0           0           0           0 (0.0%)
+  S7COMM                 2           0      23,733           1      85,525 (2.4%)
 
 위반 1건
   [HIGH] 10.0.9.99:40000 → 10.0.2.11:502  MODBUS_TCP WRITE  holding:40001
@@ -81,6 +85,7 @@ Huginn — 통신 대사 결과
 | 같은 입력에 같은 리포트가 나온다 | `EndToEndTest.같은_입력에_같은_리포트가_나온다` |
 | **갭 이후 구간은 잔여 0 으로 끝날 때만 받는다** — 중간부터 시작한 구간은 통째로 버린다 | `RunReaderTest.이후_구간은_잔여가_0일_때만_받는다` |
 | **못 본 바이트를 리포트가 말한다** — 캡처에 없던 것과 해독 못 한 것의 합 | `EndToEndTest.리포트는_못_본_바이트를_비율과_함께_낸다` · `CoexistenceTest.산업_대화의_못_본_바이트를_센다` |
+| **프로토콜별 커버리지를 낸다** — 없는 프로토콜도 0 행으로 드러난다 | `CoexistenceTest.프로토콜별_커버리지가_합산과_맞는다` · `대화를_하나도_주장하지_못한_프로토콜도_행을_낸다` |
 | **미등록 호스트의 PLC 정지·블록 다운로드가 HIGH 로 잡힌다** — S7 에서 가장 중요한 우회 신호 | `EndToEndTest.미등록_호스트가_PLC를_정지시키면_HIGH로_잡는다` · `블록_다운로드도_HIGH로_잡는다` |
 | **S7 은 ROSCTR 이 방향을 선언하므로 신호 결합이 필요 없다** | `S7DecoderTest.응답만_잡힌_캡처는_판정하지_않는다` · `양쪽_방향에_모두_요청이_있으면_판정하지_않는다` |
 | 비-S7 TPKT(COTP 연결 요청)는 소비하되 세지 않는다 — 멈추면 그 대화의 요청이 전부 사라진다 | `S7FramerTest.연결요청_뒤의_Job_을_정상적으로_뽑는다` |
@@ -119,8 +124,8 @@ cli/        진입점과 리포트
 mvn test
 ```
 
-239 건 중 7 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
-캡처 없이는 건너뛰므로 기본 실행은 232 건이다 — `samples/README.md` 참조.
+243 건 중 7 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
+캡처 없이는 건너뛰므로 기본 실행은 236 건이다 — `samples/README.md` 참조.
 
 설계와 구현 계획은 [`docs/superpowers/`](docs/superpowers/) 아래에 있다.
 
