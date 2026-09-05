@@ -68,6 +68,14 @@ public class PolicyLoader {
             if (toAddress == null) {
                 throw new PolicyException("알 수 없는 peer 참조 (to): " + rule.to());
             }
+            if (rule.protocol() == null) {
+                throw new PolicyException("규칙에 protocol 이 없다 (from: " + rule.from()
+                        + ", to: " + rule.to() + ")");
+            }
+            if (rule.access() == null) {
+                throw new PolicyException("규칙에 access 가 없다 (from: " + rule.from()
+                        + ", to: " + rule.to() + ")");
+            }
 
             Key key = new Key(fromAddress, toAddress, rule.protocol());
             Set<Access> access = table.computeIfAbsent(key, k -> EnumSet.noneOf(Access.class));

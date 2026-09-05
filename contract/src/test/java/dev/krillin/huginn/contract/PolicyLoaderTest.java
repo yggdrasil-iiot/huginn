@@ -81,6 +81,23 @@ class PolicyLoaderTest {
     }
 
     @Test
+    void 규칙에_protocol이_없으면_즉시_실패한다() {
+        // Jackson 은 키가 없으면 null 을 준다. 검사하지 않으면 예외가 아니라
+        // Key(from, to, null) 이 만들어져 그 규칙이 말없이 무효가 된다 —
+        // 선언한 통신이 전부 위반으로 쏟아진다. 조용한 이상이 시끄러운 실패보다 나쁘다.
+        PolicyException e = assertThrows(PolicyException.class,
+            () -> PolicyLoader.parse(VALID.replace("    protocol: MODBUS_TCP\n", "")));
+        assertTrue(e.getMessage().contains("hmi-01"), "어느 규칙이 문제인지 메시지에 있어야 한다");
+    }
+
+    @Test
+    void 규칙에_access가_없으면_NPE가_아니라_계약_오류다() {
+        // addAll(null) 이 던지는 NPE 는 Task 14 의 종료 코드 매핑을 빠져나간다.
+        assertThrows(PolicyException.class,
+            () -> PolicyLoader.parse(VALID.replace("    access: [READ, WRITE]\n", "")));
+    }
+
+    @Test
     void 같은_쌍의_규칙이_둘이면_access를_합친다() {
         // Map.put 으로 덮으면 앞의 READ 가 말없이 사라져 정상 통신이 위반으로 보고된다.
         CommunicationPolicy p = PolicyLoader.parse(VALID + """
