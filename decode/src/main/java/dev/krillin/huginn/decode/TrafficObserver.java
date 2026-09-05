@@ -46,6 +46,10 @@ public final class TrafficObserver {
         int skipped = 0;
         int multiClaim = 0;
         int bothDirections = 0;
+        long unobserved = 0;
+        long industrial = 0;
+        int rejectedRuns = 0;
+        int dirtyRuns = 0;
 
         for (List<TcpStream> conversation : conversations(streams)) {
             List<ProtocolDecoder> claimers = new ArrayList<>();
@@ -79,6 +83,15 @@ public final class TrafficObserver {
 
             ProtocolDecoder winner = claimers.get(0);
             List<StreamEvidence> conversationEvidence = evidence.get(winner);
+
+            // 대상 외로 빠져나간 뒤에 센다 — 배제가 규칙이 아니라 구조로 지켜진다.
+            for (StreamEvidence one : conversationEvidence) {
+                unobserved += one.unreadBytes() + one.stream().missingBytes();
+                industrial += one.capturedBytes() + one.stream().missingBytes();
+                rejectedRuns += one.rejectedRuns();
+                dirtyRuns += one.dirtyRuns();
+            }
+
             Decoded result = winner.decode(conversationEvidence);
             if (result.bothDirectionsRequested()) {
                 bothDirections++;
@@ -109,8 +122,9 @@ public final class TrafficObserver {
         }
 
         return new Diagnosed(
-            new ObservationResult(List.copyOf(observations), decoded, undecidable, skipped),
-            multiClaim, bothDirections);
+            new ObservationResult(List.copyOf(observations), decoded, undecidable, skipped,
+                unobserved, industrial),
+            multiClaim, bothDirections, rejectedRuns, dirtyRuns);
     }
 
     /**

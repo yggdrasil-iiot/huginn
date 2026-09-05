@@ -14,9 +14,17 @@ import java.util.List;
  * @param undecidableConversations Modbus 대화이지만 관찰을 하나도 만들지 못한 수
  *                                 (판정 불가, 또는 클라이언트 방향이 캡처에 없음)
  * @param skippedConversations     어느 스트림에서도 유효 프레임이 안 나온 대화 수
+ * @param unobservedBytes          산업 대화에서 <b>보지 못한</b> 바이트 — 받았지만 해독 못 한 것 +
+ *                                 캡처에 없던 것. 받지 못한 것은 "미해독" 이 아니지만
+ *                                 <b>못 본 것은 맞다</b>
+ * @param industrialBytes          그 대화들이 실제로 오갔던 바이트(받은 것 + 캡처에 없던 것).
+ *                                 대상 외 대화는 분자·분모 어디에도 들지 않는다 — 넣으면 지표가
+ *                                 SSH·DNS 양에 지배된다
  */
 public record ObservationResult(List<Observation> observations,
                                 int decodedConversations,
                                 int undecidableConversations,
-                                int skippedConversations) {
+                                int skippedConversations,
+                                long unobservedBytes,
+                                long industrialBytes) {
 }

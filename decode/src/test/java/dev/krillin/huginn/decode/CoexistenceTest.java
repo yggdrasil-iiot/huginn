@@ -70,6 +70,19 @@ class CoexistenceTest {
     }
 
     @Test
+    void 산업_대화의_못_본_바이트를_센다() {
+        // 분자 = 미해독 + 구멍, 분모 = 받은 것 + 구멍. 대상 외 대화는 양쪽 어디에도 안 든다.
+        byte[] frame = ModbusFixtures.mbap(1, 1, 3, ModbusFixtures.pdu(0, 2));
+        TcpStream gapped = new TcpStream(Instant.EPOCH, "10.0.1.20", 40000, "10.0.2.11", 502,
+            List.of(frame, frame), 500, false, false);   // 구간 둘 사이에 구멍 500 바이트
+
+        ObservationResult r = TrafficObserver.observe(List.of(gapped, sshStream));
+
+        assertEquals(500, r.unobservedBytes(), "구멍은 못 본 바이트다 — 둘째 구간은 깨끗해서 수용된다");
+        assertEquals(frame.length * 2L + 500, r.industrialBytes(), "SSH 대화는 분모에도 안 든다");
+    }
+
+    @Test
     void 어떤_바이트열도_두_프레이머에_동시에_걸리지_않는다() {
         // 오프셋 0 의 바이트 2~3 은 MBAP 에선 프로토콜 ID(반드시 0), TPKT 에선 전체 길이(>= 7)다.
         // 두 프레이머가 **서로 모순되게** 제약하는 유일한 자리이므로 그 65,536 개 값을 전부 돌린다.
