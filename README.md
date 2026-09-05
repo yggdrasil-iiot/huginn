@@ -2,7 +2,7 @@
 
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
 ![Build](https://img.shields.io/badge/build-Maven%20multi--module-blue)
-![Tests](https://img.shields.io/badge/tests-235-brightgreen)
+![Tests](https://img.shields.io/badge/tests-233-brightgreen)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 **[Yggdrasil](https://github.com/yggdrasil-iiot) IIoT 스파인의 관찰·대사 축 — 선언한 것과 실제로 오간 것을 맞춰 본다.** Modbus/TCP 와 S7comm 을 읽는다.
@@ -119,8 +119,8 @@ cli/        진입점과 리포트
 mvn test
 ```
 
-235 건 중 6 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
-캡처 없이는 건너뛰므로 기본 실행은 229 건이다 — `samples/README.md` 참조.
+233 건 중 6 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
+캡처 없이는 건너뛰므로 기본 실행은 227 건이다 — `samples/README.md` 참조.
 
 설계와 구현 계획은 [`docs/superpowers/`](docs/superpowers/) 아래에 있다.
 
