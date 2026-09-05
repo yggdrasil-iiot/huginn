@@ -80,6 +80,22 @@ class S7ObjectRefTest {
     }
 
     @Test
+    void 제어_함수는_이름으로_적는다() {
+        // fc:41 로는 운영자가 무엇이 일어났는지 모른다. 파싱이 아니라 정적 이름표라 틀릴 여지가 없다.
+        assertEquals("plc-stop", S7ObjectRef.of(new byte[]{0x29, 0x00}));
+        assertEquals("plc-control", S7ObjectRef.of(new byte[]{0x28, 0x00}));
+        assertEquals("download-request", S7ObjectRef.of(new byte[]{0x1A, 0x00}));
+        assertEquals("upload-end", S7ObjectRef.of(new byte[]{0x1F, 0x00}));
+    }
+
+    @Test
+    void 제어_함수의_이름은_대상까지_말하지_않는다() {
+        // 어떤 블록을 내려받는지는 가변길이 식별자에 있고 우리는 읽지 않는다.
+        // 이름이 대상을 아는 척하면 근거가 아니라 추측이 된다.
+        assertEquals("download-block", S7ObjectRef.of(new byte[]{0x1B, 0x00, 0x01, 0x02, 0x03}));
+    }
+
+    @Test
     void 파라미터가_짧으면_지어내지_않는다() {
         assertEquals("fc:4", S7ObjectRef.of(new byte[]{0x04, 0x01, 0x12}));
     }

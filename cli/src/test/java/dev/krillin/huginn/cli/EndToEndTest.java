@@ -1,6 +1,7 @@
 package dev.krillin.huginn.cli;
 
 import dev.krillin.huginn.decode.ModbusFixtures;
+import dev.krillin.huginn.decode.S7Fixtures;
 import dev.krillin.huginn.pcap.PcapBuilder;
 import dev.krillin.huginn.reconcile.Access;
 import dev.krillin.huginn.reconcile.Finding;
@@ -128,6 +129,40 @@ class EndToEndTest {
         assertTrue(out.contains("대상 외 대화"));
         assertTrue(out.contains("UNDECIDABLE 대화"));
         assertTrue(out.contains("UNDECIDABLE 관찰"), "대화 수와 관찰 수는 다른 값이며 둘 다 내야 한다");
+    }
+
+    @Test
+    void 미등록_호스트가_PLC를_정지시키면_HIGH로_잡는다() {
+        // S7 에서 가장 중요한 우회 신호다 — 4SICS 에 이 트래픽이 없어 합성으로만 검증한다.
+        // 서브서비스를 읽지 않으므로 objectRef 는 이름까지만 말한다.
+        byte[] capture = capture(
+            frame("10.0.9.99", 3000, "10.0.2.11", 102, S7Fixtures.job(S7Fixtures.plcStop())),
+            frame("10.0.2.11", 102, "10.0.9.99", 3000,
+                S7Fixtures.ackData(new byte[]{0x29, 0x00}, new byte[0])));
+
+        Report report = Pipeline.run(capture, POLICY);
+
+        assertEquals(1, report.findings().size());
+        Finding finding = report.findings().get(0);
+        assertEquals(Severity.HIGH, finding.severity(), "CONTROL 은 WRITE 와 같은 최고 심각도다");
+        assertEquals(Access.CONTROL, finding.evidence().access());
+        assertEquals("plc-stop", finding.evidence().objectRef());
+        assertEquals("10.0.9.99", finding.evidence().source().address());
+    }
+
+    @Test
+    void 블록_다운로드도_HIGH로_잡는다() {
+        // PLC 정지는 눈에 띄지만 로직을 조용히 바꾸고 가는 쪽이 실제 위험이다.
+        byte[] capture = capture(
+            frame("10.0.9.99", 3000, "10.0.2.11", 102, S7Fixtures.job(S7Fixtures.downloadRequest())),
+            frame("10.0.2.11", 102, "10.0.9.99", 3000,
+                S7Fixtures.ackData(new byte[]{0x1A, 0x00}, new byte[0])));
+
+        Report report = Pipeline.run(capture, POLICY);
+
+        assertEquals(1, report.findings().size());
+        assertEquals(Severity.HIGH, report.findings().get(0).severity());
+        assertEquals("download-request", report.findings().get(0).evidence().objectRef());
     }
 
     @Test

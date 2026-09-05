@@ -55,6 +55,20 @@ public final class S7Fixtures {
         return varParameter(0x05, items);
     }
 
+    /**
+     * 0x29 PLC Stop. 뒤따르는 서비스 문자열은 우리가 읽지 않으므로 형태만 갖춘다 —
+     * 픽스처가 파서보다 많이 알면 테스트가 구현이 아니라 픽스처를 검증하게 된다.
+     */
+    public static byte[] plcStop() {
+        return new byte[] {0x29, 0, 0, 0, 0, 0, 0, 0, 0, 5, 'P', '_', 'P', 'R', 'O'};
+    }
+
+    /** 0x1A Request download — 엔지니어링 워크스테이션이 PLC 에 로직을 내려받는 시작점. */
+    public static byte[] downloadRequest() {
+        return new byte[] {0x1A, 0, 0, 0, 0, 0, 0, 0, 9,
+                           '_', '0', '8', '0', '0', 'A', 'P', '0', '0'};
+    }
+
     /** 0xF0 Setup Communication — 파라미터에 항목이 없다. */
     public static byte[] setupCommunication() {
         return new byte[] {(byte) 0xF0, 0, 0, 1, 0, 1, 0, (byte) 0xF0};

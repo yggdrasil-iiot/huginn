@@ -2,7 +2,7 @@
 
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
 ![Build](https://img.shields.io/badge/build-Maven%20multi--module-blue)
-![Tests](https://img.shields.io/badge/tests-228-brightgreen)
+![Tests](https://img.shields.io/badge/tests-235-brightgreen)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 **[Yggdrasil](https://github.com/yggdrasil-iiot) IIoT 스파인의 관찰·대사 축 — 선언한 것과 실제로 오간 것을 맞춰 본다.** Modbus/TCP 와 S7comm 을 읽는다.
@@ -81,6 +81,7 @@ Huginn — 통신 대사 결과
 | 같은 입력에 같은 리포트가 나온다 | `EndToEndTest.같은_입력에_같은_리포트가_나온다` |
 | **갭 이후 구간은 잔여 0 으로 끝날 때만 받는다** — 중간부터 시작한 구간은 통째로 버린다 | `RunReaderTest.이후_구간은_잔여가_0일_때만_받는다` |
 | **못 본 바이트를 리포트가 말한다** — 캡처에 없던 것과 해독 못 한 것의 합 | `EndToEndTest.리포트는_못_본_바이트를_비율과_함께_낸다` · `CoexistenceTest.산업_대화의_못_본_바이트를_센다` |
+| **미등록 호스트의 PLC 정지·블록 다운로드가 HIGH 로 잡힌다** — S7 에서 가장 중요한 우회 신호 | `EndToEndTest.미등록_호스트가_PLC를_정지시키면_HIGH로_잡는다` · `블록_다운로드도_HIGH로_잡는다` |
 | **S7 은 ROSCTR 이 방향을 선언하므로 신호 결합이 필요 없다** | `S7DecoderTest.응답만_잡힌_캡처는_판정하지_않는다` · `양쪽_방향에_모두_요청이_있으면_판정하지_않는다` |
 | 비-S7 TPKT(COTP 연결 요청)는 소비하되 세지 않는다 — 멈추면 그 대화의 요청이 전부 사라진다 | `S7FramerTest.연결요청_뒤의_Job_을_정상적으로_뽑는다` |
 | **어떤 바이트열도 두 프레이머에 동시에 걸리지 않는다** — 65,536 값 전수, 실제 프레이머로 | `CoexistenceTest.어떤_바이트열도_두_프레이머에_동시에_걸리지_않는다` |
@@ -95,7 +96,7 @@ Huginn — 통신 대사 결과
 | **능동 스캔** | OT 에서는 스캔이 설비를 멈춘다. 수동 관찰이 원칙이다 |
 | **자동 차단·교정** | 고치지 않고 **보고만 한다.** 자동 교정은 판정 로직이 틀렸을 때 피해를 증폭시킨다 |
 | **OPC UA · Sparkplug 해독** | 거버넌스 경로 **자체**라 우회 탐지 대상이 아니다 |
-| **S7comm 의 CONTROL 계열** | PLC Start/Stop 과 블록 다운로드는 S7 에서 가장 중요한 우회 신호이지만 4SICS 캡처에 그 트래픽이 없다. 합성으로만 검증할 것이라 B단계로 미뤘다 |
+| **S7comm 제어의 서브서비스 해석** | `0x28` 의 실제 동작은 가변길이 서비스 문자열에, 블록 함수의 대상은 파일명 형태 식별자에 있다. 실캡처가 없어 대조할 수 없으므로 읽지 않는다 — 통째로 CONTROL 로 올리며 **과대분류인 면을 인정한다** |
 | **S7comm-plus** · **Userdata(ROSCTR 7) 해석** | 전자는 4SICS 세 캡처에 0 프레임, 후자는 전체 4 건이다. 검증할 데이터가 없다 |
 | **갭 이후 구간의 재동기화** | 갭 이후 구간은 **엄격 적합**으로만 읽는다 — 오프셋 0 에서 시작해 잔여 0 으로 끝날 때만 받고, 경계를 찾아 스캔하지는 않는다. 중간부터 시작한 구간은 통째로 버리고 그 바이트를 리포트에 낸다 |
 | **게이트웨이 뒤 유닛ID 단위 판정** | 정책이 IP 기준이라 시리얼 게이트웨이 경유 우회는 보이지 않는다. 유닛ID 를 정책에 넣으려면 계약 자체를 바꿔야 한다 |
@@ -118,8 +119,8 @@ cli/        진입점과 리포트
 mvn test
 ```
 
-228 건 중 6 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
-캡처 없이는 건너뛰므로 기본 실행은 222 건이다 — `samples/README.md` 참조.
+235 건 중 6 건은 4SICS 실캡처가 있을 때만 도는 회귀·진단 테스트다(`HUGINN_SAMPLES` 로 켠다).
+캡처 없이는 건너뛰므로 기본 실행은 229 건이다 — `samples/README.md` 참조.
 
 설계와 구현 계획은 [`docs/superpowers/`](docs/superpowers/) 아래에 있다.
 
