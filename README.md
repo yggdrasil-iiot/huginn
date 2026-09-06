@@ -1,5 +1,6 @@
 # Huginn
 
+[![CI](https://github.com/yggdrasil-iiot/huginn/actions/workflows/ci.yml/badge.svg)](https://github.com/yggdrasil-iiot/huginn/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
 ![Build](https://img.shields.io/badge/build-Maven%20multi--module-blue)
 ![Tests](https://img.shields.io/badge/tests-242-brightgreen)
