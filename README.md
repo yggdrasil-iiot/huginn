@@ -20,6 +20,33 @@ declare (Bifrost) → enforce (gate · Heimdall) → observe (Huginn) → reconc
    cross                the gate                 crossed              bypass
 ```
 
+## In IEC 62443 terms
+
+62443 divides a plant into **zones** and the **conduits** between them, and the operational
+requirement is not a drawing made once. Guidance describes a **living list of every communication
+path** — protocol, frequency, affected assets, responsibilities — and notes that auditors
+explicitly ask for it. SR 6.2, continuous monitoring, is the same idea in the system requirements.
+
+**Huginn produces the observed half of that list, and reconciles it against the declared half.**
+Its output is one row per undeclared path: who talked to whom, over which protocol, doing what,
+touching which object.
+
+The difference from how this is usually done is the whole point. The prevailing practice is to
+*baseline* normal traffic and alert on deviation, because nobody declared the conduits in the
+first place. Here they are declared — a deny-by-default `CommunicationPolicy` — so Huginn
+compares rather than learns. **There is no model to train, and no baseline that can drift,
+because there is no baseline.** A conduit that was never declared is a finding on the first
+packet, not after a learning window.
+
+What it does not yet give a real conduit register: **frequency** (a finding says a path exists,
+not how often it is used), **ownership** (not derivable from traffic — it has to come from the
+declaration side), and any conduit carried by a protocol it does not decode, which is counted as
+out of scope rather than enumerated. Those gaps and what would force them are written up in
+[Bifrost's `docs/ENTERPRISE.md` §5](https://github.com/yggdrasil-iiot/bifrost/blob/main/docs/ENTERPRISE.md#5-conduit-inventory).
+
+This is a way of describing what the tool does, not a conformance claim. There is no
+certification here, and 62443-3-3 asks for a great deal more than one register.
+
 ## Usage
 
 ```bash
@@ -148,6 +175,7 @@ mvn test
 - **Non-standard-port industrial traffic was never seen in real data.** Bypass detection on unusual ports is proven only by synthetic captures.
 - **Streams are held in memory**, now including post-gap bytes. A large capture retains hundreds of MB.
 - **`objectRef` is evidence, not judgment.** It says what was touched so an operator can act; it never influences the verdict.
+- **The IEC 62443 framing above describes the job, not a certification.** Huginn produces one artefact that 62443 asks an operator to maintain, and it produces it incompletely (see that section). Nothing here has been assessed by anyone.
 - Parts were developed with AI assistance; every design decision and every recorded number was verified against real captures and cross-checked with tshark by the author.
 
 Reporting something exploitable: [SECURITY.md](SECURITY.md). Huginn parses attacker-influenced
