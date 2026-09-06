@@ -149,6 +149,10 @@ mvn test
 - **`objectRef` is evidence, not judgment.** It says what was touched so an operator can act; it never influences the verdict.
 - Parts were developed with AI assistance; every design decision and every recorded number was verified against real captures and cross-checked with tshark by the author.
 
+Reporting something exploitable: [SECURITY.md](SECURITY.md). Huginn parses attacker-influenced
+bytes for a living, so a crafted capture that crashes, hangs, or exhausts memory is in scope; the
+limitations listed above are known positions and need not be reported.
+
 Korean README: [README.ko.md](README.ko.md). Design and implementation documents live under [`docs/superpowers/`](docs/superpowers/) — including the falsification conditions each phase set for itself and how they were judged.
 
 ## License
