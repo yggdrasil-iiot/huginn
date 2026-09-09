@@ -54,6 +54,8 @@ java -jar cli/target/huginn.jar capture.pcap examples/policy.yaml
 
 종료 코드는 **0** 위반 없음 · **1** 위반 있음 · **2** 사용법·입력·계약 오류다. `UNDECIDABLE` 이 아무리 많아도 위반이 0 이면 0 을 낸다 — 커버리지는 리포트가 항상 내므로 종료 코드까지 흐리지 않는다.
 
+**정책은 어디서 오나.** 직접 쓴다 — 또는 Bifrost 가 거버넌스하는 장비에 한해 뽑아낸다: `gates conduit-project <registry> --edge <ip> --bind <장비>=<ip>` 가 바로 이 형식의 조각을 내고, 거버넌스 엣지만이 그 장비에 쓸 수 있다고 선언한다. Huginn 은 그걸 그대로 읽는다(Huginn 코드는 Bifrost 의 존재를 모른다 — 건너오는 건 파일 하나뿐이다). 그 조각의 헤더가 스스로 말하는 두 가지를 여기서도 되풀이한다: 장비↔주소 결속은 와이어에서 발견된 게 아니라 **사람이 선언한 것**이고, 이건 **조각**이다 — 누가 *쓸* 수 있는지만 말하지 누가 정당하게 *읽는지*는 모르므로, 단독으로 돌리지 말고 현장 정책에 합쳐라. 그러면 다른 호스트가 거버넌스 장비에 쓰는 것이, 엣지가 말하지도 않는 프로토콜로 들어오더라도, 이 도구가 찾으라고 있는 바로 그 우회로 잡힌다. Bifrost 의 [`run-huginn-seam-gate.sh`](https://github.com/yggdrasil-iiot/bifrost/blob/main/scripts/run-huginn-seam-gate.sh) 가 4SICS 캡처로 끝까지 증명한다.
+
 정책은 deny-by-default 다. 허용된 것만 적고, 적히지 않은 것은 전부 위반이다([`examples/policy.yaml`](examples/policy.yaml)):
 
 ```yaml

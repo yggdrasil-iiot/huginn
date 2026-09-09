@@ -56,6 +56,8 @@ java -jar cli/target/huginn.jar capture.pcap examples/policy.yaml
 
 Exit codes: **0** no violations · **1** violations found · **2** usage, input, or contract error. **A large `UNDECIDABLE` count still exits 0 when there are no violations** — coverage is always reported, so the exit code does not have to carry it too.
 
+**Where the policy comes from.** You write it — or, for the equipment Bifrost governs, project it: `gates conduit-project <registry> --edge <ip> --bind <equipment>=<ip>` emits a fragment in exactly this format saying the governed edge is the only permitted writer of that equipment, and Huginn reads it unchanged (no Huginn code knows Bifrost exists; a file crosses, nothing else). Two things about that fragment are stated in its own header and are worth repeating here: the equipment-to-address binding is **declared by a person**, not discovered on the wire, and it is a **fragment** — it says who may *write*, not who may legitimately *read*, so merge it into the site policy rather than running it alone. A write to governed equipment from any other host, over a protocol the edge does not even speak, is then the bypass this tool exists to find. Proved end-to-end against a 4SICS capture by Bifrost's [`run-huginn-seam-gate.sh`](https://github.com/yggdrasil-iiot/bifrost/blob/main/scripts/run-huginn-seam-gate.sh).
+
 The policy is deny-by-default. Only what is written is allowed ([`examples/policy.yaml`](examples/policy.yaml)):
 
 ```yaml
