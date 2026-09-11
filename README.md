@@ -12,7 +12,7 @@
 
 [Bifrost](https://github.com/yggdrasil-iiot/bifrost) declares *what may cross the OT/IT boundary*, and a pre-merge gate plus the runtime edge (Heimdall) enforce it. But an engineering workstation wired straight to a PLC, an unregistered device on the segment, a path around the broker — none of those pass through the gate, so nothing knows about them. Huginn reads a pcap, decodes the industrial traffic that actually flowed, and **reconciles it against the declared communication policy** to find undeclared communication.
 
-Commercial OT diagnostic tools must **learn** a baseline from traffic, because nobody declared one. In the Yggdrasil family the **contract is the allowlist** — no signatures, no anomaly model, just comparison.
+Commercial OT monitoring has to derive "normal" from the traffic itself — a **learned** behavioural baseline, generally alongside signatures and protocol-aware rules — because there is no declaration to compare against. In the Yggdrasil family the **contract is the allowlist**, so this compares instead: no model to train, no baseline to tune.
 
 ```
 declare (Bifrost) → enforce (gate · Heimdall) → observe (Huginn) → reconcile (Huginn)
@@ -33,7 +33,9 @@ touching which object.
 
 The difference from how this is usually done is the whole point. The prevailing practice is to
 *baseline* normal traffic and alert on deviation, because nobody declared the conduits in the
-first place. Here they are declared — a deny-by-default `CommunicationPolicy` — so Huginn
+first place. Signatures and protocol-aware rules sit alongside that baseline in a real product,
+but the baseline is the part that has to be **learned**, and it is the part a declaration
+replaces. Here the conduits are declared — a deny-by-default `CommunicationPolicy` — so Huginn
 compares rather than learns. **There is no model to train, and no baseline that can drift,
 because there is no baseline.** A conduit that was never declared is a finding on the first
 packet, not after a learning window.
