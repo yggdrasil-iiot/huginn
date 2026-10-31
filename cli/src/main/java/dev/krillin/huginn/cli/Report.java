@@ -29,9 +29,10 @@ record Report(int packetsProcessed,
               long unobservedBytes,
               long industrialBytes,
               List<ProtocolCoverage> byProtocol,
-              List<Finding> findings) {
+              List<Finding> findings) implements Rendered {
 
-    String render() {
+    @Override
+    public String render() {
         StringBuilder out = new StringBuilder("Huginn — 통신 대사 결과\n");
         out.append(count("처리 패킷", packetsProcessed));
         out.append(count("대상 외 패킷", packetsSkipped));
@@ -41,7 +42,11 @@ record Report(int packetsProcessed,
         out.append(count("UNDECIDABLE 관찰", undecidableObservations));
         out.append(unobservedLine());
         out.append(protocolTable());
+        return appendFindings(out, findings);
+    }
 
+    /** 위반 목록은 입력이 pcap 이든 Zeek 로그든 같은 모양으로 낸다. */
+    static String appendFindings(StringBuilder out, List<Finding> findings) {
         if (findings.isEmpty()) {
             return out.append("\n위반 없음\n").toString();
         }
@@ -112,7 +117,7 @@ record Report(int packetsProcessed,
      * <p>여백은 글자 수가 아니라 <b>표시 폭</b>으로 맞춘다. {@code %-18s} 는 한글 한 자를 1 로
      * 세지만 콘솔에서는 2 칸을 차지해, 라벨마다 한글 비율이 다른 이 표가 어긋난다.
      */
-    private static String count(String label, int value) {
+    static String count(String label, long value) {
         int padding = Math.max(1, LABEL_WIDTH - displayWidth(label));
         return "  " + label + " ".repeat(padding)
             + String.format(Locale.ROOT, "%8s", String.format(Locale.ROOT, "%,d", value)) + "\n";

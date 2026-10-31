@@ -12,8 +12,14 @@ import dev.krillin.huginn.pcap.TcpStream;
 import dev.krillin.huginn.pcap.TcpStreamAssembler;
 import dev.krillin.huginn.reconcile.ReconcileResult;
 import dev.krillin.huginn.reconcile.Reconciler;
+import dev.krillin.huginn.zeek.ZeekLog;
+import dev.krillin.huginn.zeek.ZeekLogReader;
+import dev.krillin.huginn.zeek.ZeekObservationResult;
+import dev.krillin.huginn.zeek.ZeekObserver;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * pcap 바이트와 정책 YAML 에서 리포트까지 — 순수 실행이다. 파일도 표준출력도 종료 코드도
@@ -50,5 +56,22 @@ final class Pipeline {
             observed.industrialBytes(),
             observed.byProtocol(),
             reconciled.findings());
+    }
+
+    /**
+     * Zeek ICSNPP 로그에서 리포트까지. 해독기 대신 {@link ZeekObserver} 가 관찰을 만들고,
+     * 대사는 pcap 경로와 같은 {@link Reconciler} 가 한다.
+     *
+     * @param logs 출처(파일 경로) → 로그 본문. 순서가 리포트 순서다
+     */
+    static ZeekReport runZeek(Map<String, String> logs, String policyYaml) {
+        CommunicationPolicy policy = PolicyLoader.parse(policyYaml);
+
+        List<ZeekLog> parsed = new ArrayList<>();
+        logs.forEach((source, text) -> parsed.add(ZeekLogReader.parse(text, source)));
+        ZeekObservationResult observed = ZeekObserver.observe(parsed);
+        ReconcileResult reconciled = new Reconciler(policy).reconcile(observed.observations());
+
+        return new ZeekReport(observed.byLog(), reconciled.undecidableCount(), reconciled.findings());
     }
 }

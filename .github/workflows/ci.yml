@@ -1,6 +1,7 @@
 # The 4SICS captures are not redistributed here (samples/.gitignore), so the seven
-# capture-gated regression tests skip and the suite runs 235 of 242. Everything that can be
-# proven without a licensed third-party capture is proven here.
+# capture-gated tests and the three Zeek-on-4SICS tests skip. CI fetches the two ICSNPP
+# traces and runs 303 of 313. Everything that can be proven without a licensed third-party
+# capture is proven here.
 name: CI
 
 on:
@@ -23,7 +24,13 @@ jobs:
           java-version: '17'
           distribution: temurin
           cache: maven
+      # The two ICSNPP traces are fetched from pinned commits and hash-checked, so the
+      # pcap-versus-Zeek-log cross-check runs on every build instead of only on a laptop.
+      - name: Fetch ICSNPP traces
+        run: bash scripts/fetch-icsnpp-traces.sh
       - name: Test
         run: mvn -B -ntp test
+        env:
+          HUGINN_ICSNPP_TRACES: ${{ github.workspace }}/samples/icsnpp
       - name: Package the shaded CLI
         run: mvn -B -ntp -DskipTests package
