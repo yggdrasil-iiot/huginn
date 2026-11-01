@@ -129,6 +129,44 @@ Huginn 은 포트를 보지 않고 프레이밍으로 판정하고 tshark 는 �
 Modbus 응답 49,787 건과 S7 응답 76,951 건을 Huginn 은 **하나도 관찰하지 않았다** — 설계 §5-⑤
 ("요청만 `Observation` 이 된다")가 두 프로토콜 모두에서 실트래픽으로 확인됐다.
 
+## Zeek ICSNPP 로그로 같은 캡처를 읽으면 (2026-11-01)
+
+`scripts/zeek-logs.sh <capture.pcap>` 는 `scripts/zeek/Dockerfile`(Zeek 9.0.1 + 고정 커밋의 ICSNPP 패키지 둘)로 도커 이미지를 만들고 `samples/zeek/<캡처>/` 에 로그를 쓴다. 이 로그도 캡처와 같은 이유로 커밋하지 않는다.
+
+```bash
+bash scripts/zeek-logs.sh samples/4SICS-GeekLounge-151022.pcap
+java -jar cli/target/huginn.jar \
+    --zeek-log samples/zeek/4SICS-GeekLounge-151022/s7comm.log \
+    --zeek-log samples/zeek/4SICS-GeekLounge-151022/modbus_detailed.log \
+    samples/4SICS-GeekLounge-151022-policy.yaml
+```
+
+같은 정책으로 대사한 결과다.
+
+| 캡처 | pcap 경로 위반 | Zeek 로그 경로 위반 |
+|---|---|---|
+| 151020 | 23 (S7 HIGH 23) | 18 (S7 HIGH 18) |
+| 151021 | 73 (S7 HIGH 48 · S7 MEDIUM 14 · Modbus MEDIUM 11) | 68 (S7 HIGH 48 · S7 MEDIUM 14 · Modbus MEDIUM 6) |
+| 151022 | 21,070 (Modbus HIGH 20,980 · Modbus MEDIUM 69 · S7 HIGH 14 · S7 MEDIUM 7) | 5,330 (Modbus HIGH 5,272 · Modbus MEDIUM 37 · S7 HIGH 14 · S7 MEDIUM 7) |
+
+로그 경로의 행 행방:
+
+- 151020: `s7comm` 5,093 행, 요청 2,547.
+- 151021: `s7comm` 105,217 행 · 요청 52,609. `modbus_detailed` 13 행 · 요청 6 · 방향 미확정 7. UNDECIDABLE 관찰 23.
+- 151022: `s7comm` 68,308 행 · 요청 34,154. `modbus_detailed` 51,719 행 · 요청 행 32,265 · 방향 미확정 19,454. UNDECIDABLE 관찰 120.
+
+S7 요청은 pcap 경로가 23,732 / 86,403 / 53,217(tshark 4.6.8 의 ROSCTR 1 수와 같다)을 세고, 로그에는 2,547 / 52,609 / 34,154 가 남았다.
+
+차이의 원인 — 모두 실측이다.
+
+- **151020:** 긴 S7 연결이 Zeek `conn.log` 에서 약 6.6 시간인데, `s7comm.log` 는 처음 50 분 남짓 동안 10 분에 약 1,200 건씩 요청을 남기다가 그 뒤로 거의 남기지 않는다. 연결 이력에 재전송이 보인다. 로그 경로의 위반 18 건은 갭 이후 구간을 읽기 전의 pcap 경로가 냈던 수와 같고, pcap 경로에만 있는 쓰기 5 건은 그 갭 이후 구간에 있다.
+- **151021:** 빠진 Modbus MEDIUM 5 건은 Read Device Identification(FC 43) 요청이다. ICSNPP 는 이를 `mei_type` 만 든 `matched=F` 행으로 남겼다. 이런 행은 홀로 온 요청이든 홀로 온 응답이든 모양이 같아 방향을 정할 수 없고, 연결마다 UNDECIDABLE 하나로 남는다.
+- **151022:** Zeek 은 짝 없는 `READ_WRITE_MULTIPLE_REGISTERS_EXCEPTION` 10,298 행과 `WRITE_MULTIPLE_COILS_EXCEPTION` 5,436 행(ILLEGAL_FUNCTION 또는 GATEWAY_PATH_UNAVAILABLE)을 남겼다. Huginn 디코더가 FC 23 / FC 15 쓰기로 보는 요청이 로그에는 요청으로 나타나지 않았다는 뜻이다. 이 행들은 방향 미확정이고, 로그 경로에서는 그 쓰기가 위반이 되지 않는다.
+
+로그 경로는 로그에 있는 것을 정확히 판정하고, 로그는 와이어보다 적은 요청을 담을 수 있다. 두 경로를 비교할 수 있는 곳에서 로그 경로의 수가 적은 것은 로그의 성질이고, 리포트는 그것을 방향 미확정 행과 "패킷·바이트 커버리지 없음" 으로 밝힌다. S7comm-plus 에 대해서는 로그 경로가 Huginn 의 유일한 경로다.
+
+이 수는 `ZeekRealCaptureTest` 가 붙잡아 둔다(`HUGINN_ZEEK_SAMPLES=samples/zeek` 일 때 돈다).
+
 ## 아직 검증되지 않은 것
 
 - **S7ANY 주소 경로** — 실캡처의 주소는 100% 가 1200SYM 이고 S7ANY 는 0 건이다. 합성으로만 검증

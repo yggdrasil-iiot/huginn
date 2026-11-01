@@ -15,6 +15,7 @@
     <module>contract</module>
     <module>pcap</module>
     <module>decode</module>
+    <module>zeek</module>
     <module>cli</module>
   </modules>
 

@@ -31,6 +31,33 @@ class PolicyReconcileIntegrationTest {
     }
 
     @Test
+    void S7COMM_허용은_S7COMM_PLUS_를_허용하지_않는다() {
+        // 둘을 한 이름으로 접으면 S7-300 에 대한 선언이 S7-1500 으로 가는 통신까지 덮는다.
+        CommunicationPolicy policy = PolicyLoader.parse("""
+            version: 1
+            peers:
+              - id: hmi-01
+                address: 10.0.1.20
+              - id: plc-1500
+                address: 10.0.2.15
+            allowed:
+              - from: hmi-01
+                to: plc-1500
+                protocol: S7COMM
+                access: [READ]
+              - from: hmi-01
+                to: plc-1500
+                protocol: S7COMM_PLUS
+                access: [WRITE]
+            """);
+
+        assertTrue(policy.allows("10.0.1.20", "10.0.2.15", Protocol.S7COMM, Access.READ));
+        assertFalse(policy.allows("10.0.1.20", "10.0.2.15", Protocol.S7COMM_PLUS, Access.READ));
+        assertTrue(policy.allows("10.0.1.20", "10.0.2.15", Protocol.S7COMM_PLUS, Access.WRITE));
+        assertFalse(policy.allows("10.0.1.20", "10.0.2.15", Protocol.S7COMM, Access.WRITE));
+    }
+
+    @Test
     void 파일로_선언한_정책이_대사기에_그대로_먹힌다() {
         Reconciler r = new Reconciler(PolicyLoader.parse(POLICY));
 

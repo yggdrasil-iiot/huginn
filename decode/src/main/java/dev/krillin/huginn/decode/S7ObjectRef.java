@@ -144,6 +144,15 @@ public final class S7ObjectRef {
         };
     }
 
+    /**
+     * 파라미터 없이 함수코드만 아는 경우 — Zeek {@code s7comm.log} 는 변수 주소를 싣지 않는다.
+     * 제어 함수면 같은 이름표를, 아니면 {@code fc:<n>} 을 낸다. 주소를 아는 척하지 않는다.
+     */
+    public static String ofFunction(int functionCode) {
+        String controlName = CONTROL_NAMES.get(functionCode);
+        return controlName != null ? controlName : "fc:" + functionCode;
+    }
+
     /** {@code parameter[0] & 0xFF} — 부호 있는 byte 로 쓰면 0xF0 이 -16 이 된다. */
     private static String functionOnly(byte[] parameter) {
         return "fc:" + (parameter.length > 0 ? parameter[0] & 0xFF : -1);
