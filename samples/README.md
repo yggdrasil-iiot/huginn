@@ -57,8 +57,8 @@ pcap 으로 정규화한다(2026-09-05 현재 세 파일 모두 이미 pcap 이�
 2차에서 `decode` 밖의 프로덕션 소스는 **두 곳, 네 줄**만 바뀌었다:
 
 ```
-cli/src/main/java/dev/krillin/huginn/cli/Pipeline.java             | 6 +++---
-reconcile/src/main/java/dev/krillin/huginn/reconcile/Protocol.java | 2 +-
+cli/src/main/java/yggdrasil/huginn/cli/Pipeline.java             | 6 +++---
+reconcile/src/main/java/yggdrasil/huginn/reconcile/Protocol.java | 2 +-
 ```
 
 `Protocol` 열거형 상수 하나와 `Pipeline` 의 진입점 이름(import·javadoc·호출)이 전부다.
